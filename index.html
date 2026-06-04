@@ -640,7 +640,7 @@ function bottlePickedCount() {
 function openBottle() {
   var limit = G.bottleLimit || 6;
   if (bottlePickedCount() >= limit) {
-    toast('今は瓶を拾えない。ダンジョンをクリアすると増える。');
+    toast('今は瓶を拾えないみたい。仲間は家の中に興味があるようだ。');
     return;
   }
   if (!G.bottleQ.length) { toast('今は瓶が流れ着いていない...'); return; }
