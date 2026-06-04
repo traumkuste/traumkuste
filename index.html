@@ -204,7 +204,7 @@ body{background:#f5f0e8;font-family:Georgia,serif;display:flex;justify-content:c
   <span id="sc">0体</span>
 </div>
 <div style="display:flex;justify-content:space-between;padding:4px 16px;background:#fff;border-bottom:1px solid #e8dece;font-size:11px;color:#6b5e4e">
-  <span id="lives-display">❤️❤️❤️❤️❤️</span>
+  <span id="lives-display">Life 5/5</span>
   <span id="taler-display" style="color:#c8a84b">0T</span>
 </div>
 
@@ -637,7 +637,7 @@ function updateCounts() {
   document.getElementById('sw').textContent = G.words.length + '語';
   regenLives();
   var livesEl = document.getElementById('lives-display');
-  if (livesEl) livesEl.textContent = livesDisplay();
+  if (livesEl) livesEl.textContent = 'Life ' + G.quizLives + '/' + QUIZ_LIVES_MAX;
   var talerEl = document.getElementById('taler-display');
   if (talerEl) talerEl.textContent = G.taler + 'T';
   document.getElementById('sc').textContent = G.companions.length + '体';
