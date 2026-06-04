@@ -2223,11 +2223,11 @@ function bindAll() {
   document.getElementById('btn-goto-bookshelf').addEventListener('click', function(){ renderBookshelf(); showScreen('bookshelf-screen'); });
   document.getElementById('btn-goto-inventory').addEventListener('click', function(){ showScreen('inventory-screen'); });
   document.getElementById('btn-goto-door').addEventListener('click', function(){
-    if (!G.companions.find(function(c){ return c.status === '正式加入'; })) {
-      toast('正式加入の仲間がいません。展望台でクイズに答えよう'); return;
-    }
-    showScreen('dungeon-screen');
-  });
+  if (!G.companions.find(function(c){ return c.status === '正式加入' || c.status === '仮加入'; })) {
+    toast('まだ仲間がいません。展望台でクイズに答えよう'); return;
+  }
+  showScreen('dungeon-screen');
+});
 
   // quiz
   document.getElementById('btn-quiz-back').addEventListener('click', function(){ showScreen('home-screen'); });
