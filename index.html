@@ -1559,7 +1559,8 @@ function useItem(item) {
 
 function openCompPicker(item, mode) {
   var avail = G.companions.filter(function(c){
-    if (c.status !== '正式加入') return false;
+    if (mode === 'equip') return (c.status === '正式加入' || c.status === '仮加入') && c.equip.length < 2;
+if (mode === 'skill') return (c.status === '正式加入' || c.status === '仮加入') && !c.skill;
     if (mode === 'equip') return c.equip.length < 2;
     if (mode === 'skill') return !c.skill;
     return true;
