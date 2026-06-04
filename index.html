@@ -840,9 +840,8 @@ function answerQuiz(correct, btn, correctMeaning) {
       q.correctCount++;
       if (q.correctCount === 1) promoteProvisional(q);
     }
-    var wasReverse = q.isReverse;
     q.isReverse = false;
-    if (!wasReverse) {
+    if (true) {
     if (q.correctCount >= 3) { q.status = '定着済み'; promoteFull(q); document.getElementById('qrestext').textContent = '「' + (q.article ? q.article + ' ' : '') + q.word + '」が完全に根付いた。'; }
       else { var aw = q.article ? q.article + ' ' + q.word : q.word; document.getElementById('qrestext').textContent = '正解。' + aw + 'が' + q.layer + 'に根付いていく。（' + q.correctCount + '/3）'; }
     } else {
