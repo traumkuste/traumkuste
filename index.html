@@ -703,6 +703,7 @@ function registerWord() {
   if (!G.selLayer) { toast('送り出す層を選んでください'); return; }
   if (G.words.find(function(w){ return w.word === word; })) { toast('すでに登録されています'); return; }
   addWord(word, meaning, G.selLayer);
+  consumeItem('空のBlatt');
   toast('「' + word + '」を' + G.selLayer + 'へ送り出した');
   saveGame();
   document.getElementById('reg-word').value = '';
@@ -1741,9 +1742,9 @@ function initNameEntry() {
 function updatePlayerName() {
   var n = G.playerName || '?';
   var sl = document.getElementById('sofa-label');
-  if (sl) sl.textContent = 'ソファ / ' + n + 'について';
+  if (sl) sl.textContent = n + 'のソファ';
   var st = document.getElementById('sofa-title');
-  if (st) st.textContent = 'ソファ / ' + n + 'について';
+  if (st) st.textContent = n + 'のソファ';
 }
 
 // ── ソファ ──
@@ -1994,7 +1995,11 @@ function bindAll() {
 
   // world
   document.getElementById('btn-bottle').addEventListener('click', openBottle);
-  document.getElementById('btn-write').addEventListener('click', function(){ showScreen('register-screen'); });
+  document.getElementById('btn-write').addEventListener('click', function(){
+  var hasBlatt = G.inventory.find(function(i){ return i.name === '空のBlatt'; });
+  if (!hasBlatt) { toast('空のBlattがない。ダンジョンで見つけよう。'); return; }
+  showScreen('register-screen');
+});
 
   // layer rows
   // 展望台バッジ
