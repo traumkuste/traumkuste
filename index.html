@@ -834,19 +834,13 @@ function answerQuiz(correct, btn, correctMeaning) {
         return;
       }
     }
-    if (!q.isReverse) {
-      q.lastCorrectAt = now_ms;
-      if (q.correctCount === 0) q.firstCorrectAt = now_ms;
-      q.correctCount++;
-      if (q.correctCount === 1) promoteProvisional(q);
-    }
+    q.lastCorrectAt = now_ms;
+    if (q.correctCount === 0) q.firstCorrectAt = now_ms;
+    q.correctCount++;
+    if (q.correctCount === 1) promoteProvisional(q);
     q.isReverse = false;
-    if (true) {
     if (q.correctCount >= 3) { q.status = '定着済み'; promoteFull(q); document.getElementById('qrestext').textContent = '「' + (q.article ? q.article + ' ' : '') + q.word + '」が完全に根付いた。'; }
-      else { var aw = q.article ? q.article + ' ' + q.word : q.word; document.getElementById('qrestext').textContent = '正解。' + aw + 'が' + q.layer + 'に根付いていく。（' + q.correctCount + '/3）'; }
-    } else {
-      document.getElementById('qrestext').textContent = '正解！' + (q.article ? q.article + ' ' : '') + q.word + '（' + q.meaning + '）';
-    }
+    else { var aw = q.article ? q.article + ' ' + q.word : q.word; document.getElementById('qrestext').textContent = '正解。' + aw + 'が' + q.layer + 'に根付いていく。（' + q.correctCount + '/3）'; }
   } else {
     btn.classList.add('ng');
     document.querySelectorAll('.choice').forEach(function(b){ if (b.textContent === correctMeaning) b.classList.add('show-ok'); });
