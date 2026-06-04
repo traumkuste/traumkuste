@@ -2131,9 +2131,14 @@ function buyItem(name, price, type, props) {
 function checkDungeonClear(dungName) {
   if (G.clearedDungeons.indexOf(dungName) < 0) {
     G.clearedDungeons.push(dungName);
-    // ダンジョンクリアごとに瓶上限+6
-    G.bottleLimit = (G.bottleLimit || 6) + 6;
-    toast('新しい瓶が流れ着くようになった。（上限+6）');
+    // ダンジョンクリアごとに瓶上限+3
+    G.bottleLimit = (G.bottleLimit || 3) + 3;
+    toast('新しい瓶が流れ着くようになった。（上限+3）');
+    if (dungName === '霧の入り江') {
+      var survived = dungState.party.filter(function(c){ return c.hp > 0; });
+      var hero = survived.length ? survived[0].word : dungState.party[0].word;
+      G.logs.unshift({ time: now(), text: 'はじめての冒険を終えて、' + hero + 'は嬉しそうだ。浜辺の方から瓶の鳴る音が聞こえた。' });
+    }
     if (dungName === '深海神殿') {
       G.laterneUnlocked = true;
       var row = document.getElementById('laterne-row');
