@@ -814,6 +814,7 @@ function answerQuiz(correct, btn, correctMeaning) {
     var now_ms = Date.now();
     var HALF_DAY = 12 * 60 * 60 * 1000;
     var canProgress = true;
+    if (!q.isReverse) {
     if (q.correctCount === 1 && q.lastCorrectAt) {
       // 2回目：12時間以上経過が必要
       if (now_ms - q.lastCorrectAt < HALF_DAY) {
@@ -833,6 +834,7 @@ function answerQuiz(correct, btn, correctMeaning) {
         document.getElementById('qresult').classList.add('show');
         return;
       }
+          }
     }
     q.lastCorrectAt = now_ms;
     if (q.correctCount === 0) q.firstCorrectAt = now_ms;
