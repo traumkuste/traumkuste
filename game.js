@@ -736,11 +736,11 @@ function triggerBattle() {
   var enemyAtk, enemyDef, enemyHP;
   var isDeepSea = dungLayer === '深海';
   if (dungLayer === '浜辺') {
-    enemyAtk = 10 + Math.floor(Math.random() * 8);
+    enemyAtk = 8 + Math.floor(Math.random() * 8);
     enemyDef = 5  + Math.floor(Math.random() * 5);
-    enemyHP  = 80 + Math.floor(Math.random() * 50);  // 80-129
+    enemyHP  = 70 + Math.floor(Math.random() * 50);  // 80-129
   } else if (dungLayer === '海') {
-    enemyAtk = 14 + Math.floor(Math.random() * 10);
+    enemyAtk = 13 + Math.floor(Math.random() * 10);
     enemyDef = 8  + Math.floor(Math.random() * 7);
     enemyHP  = 150 + Math.floor(Math.random() * 70); // 150-219
   } else {
