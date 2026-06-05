@@ -86,6 +86,13 @@ function updateCounts() {
     if (el) el.textContent = n + '語';
   }
 }
+  // 展望台バッジ
+  var pending = G.words.filter(function(w){ return w.status !== '定着済み'; }).length;
+  var badge = document.getElementById('quiz-badge');
+  if (badge) {
+    if (pending > 0) { badge.textContent = pending; badge.style.display = 'inline'; }
+    else { badge.style.display = 'none'; }
+  }
 
 // ── WORD / BOTTLE ──
 function addWord(word, meaning, layer, article, fromBottle) {
@@ -1865,13 +1872,7 @@ function bindAll() {
 });
 
   // layer rows
-  // 展望台バッジ
-  var pending = G.words.filter(function(w){ return w.status !== '定着済み'; }).length;
-  var badge = document.getElementById('quiz-badge');
-  if (badge) {
-    if (pending > 0) { badge.textContent = pending; badge.style.display = 'inline'; }
-    else { badge.style.display = 'none'; }
-  }
+
   ['空中都市','湖','庭','浜辺','海','深海'].forEach(function(l) {
     var el = document.getElementById('layer-' + l);
     if (el) el.addEventListener('click', function() {
