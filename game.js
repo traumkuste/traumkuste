@@ -1462,7 +1462,7 @@ function updatePlayerName() {
   var sl = document.getElementById('sofa-label');
   if (sl) sl.textContent = n + 'のソファ';
   var st = document.getElementById('sofa-title');
-  if (st) st.textContent = n + 'のソファ';
+  if (st) st.textContent = n + 'のソファ　Lv.' + (G.playerLevel || 1);
 }
 
 // ── 本棚（語彙リスト）──
