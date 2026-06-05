@@ -1035,7 +1035,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材2個以上あれば錬成可能
+  // 層ごとに素材5個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -1049,7 +1049,7 @@ function renderCraftArea() {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (inv) total += (inv.qty || 1);
     });
-    if (total >= 2) craftable.push(layer);
+    if (total >= 5) craftable.push(layer);
   });
 
   var container = document.getElementById('inv-grid').parentElement;
@@ -1065,7 +1065,7 @@ function renderCraftArea() {
         return '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer" data-craft-layer="' + layer + '">'
           + '<span style="font-size:22px">💠</span>'
           + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + layer + 'の進化の石</div>'
-          + '<div style="font-size:10px;color:#6b5e4e">素材×2 → 進化の石×1</div></div>'
+          + '<div style="font-size:10px;color:#6b5e4e">素材×5 → 進化の石×1</div></div>'
           + '<div style="font-size:11px;color:#7b9e87">錬成する</div>'
           + '</div>';
       }).join('');
@@ -1089,14 +1089,14 @@ function craftEvoStone(layer) {
   var mats = LAYER_MAT[layer];
   var consumed = 0;
   mats.forEach(function(name) {
-    while (consumed < 2) {
+    while (consumed < 5) {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (!inv || inv.qty <= 0) break;
       inv.qty--; consumed++;
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 2) { toast('素材が足りません'); return; }
+  if (consumed < 5) { toast('素材が足りません'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
