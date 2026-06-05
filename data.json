@@ -211,7 +211,7 @@
       "name": "霧の入り江",
       "layer": "浜辺",
       "dur": 30,
-      "encounters": 2,
+      "encounters": 3,
       "desc": "霧の中に古い難破船が見える"
     },
     {
@@ -219,7 +219,7 @@
       "name": "珊瑚の迷宮",
       "layer": "海",
       "dur": 120,
-      "encounters": 3,
+      "encounters": 5,
       "desc": "光が届かない深さに珊瑚が広がる"
     },
     {
@@ -227,7 +227,7 @@
       "name": "深海神殿",
       "layer": "深海",
       "dur": 300,
-      "encounters": 3,
+      "encounters": 7,
       "desc": "誰も戻らないと言われる場所"
     }
   ],
