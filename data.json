@@ -211,7 +211,7 @@
       "name": "霧の入り江",
       "layer": "浜辺",
       "dur": 30,
-      "encounters": 3,
+      "encounters": 2,
       "desc": "霧の中に古い難破船が見える"
     },
     {
@@ -219,7 +219,7 @@
       "name": "珊瑚の迷宮",
       "layer": "海",
       "dur": 120,
-      "encounters": 5,
+      "encounters": 4,
       "desc": "光が届かない深さに珊瑚が広がる"
     },
     {
