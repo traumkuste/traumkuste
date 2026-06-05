@@ -29,11 +29,11 @@ body{background:#f5f0e8;font-family:Georgia,serif;display:flex;justify-content:c
 .layer-row .lname{font-size:14px;font-weight:700;letter-spacing:1px}
 .layer-row .ldesc{font-size:11px;opacity:.7;margin-top:2px}
 .layer-row .lcnt{font-size:11px;position:absolute;right:14px;top:50%;transform:translateY(-50%);opacity:.6}
-.l-sky{background:#daedf7;color:#1a4a6e}
-.l-lake{background:#c8dff0;color:#1a3d5c}
-.l-garden{background:#c8deb8;color:#2a5232}
-.l-shore{background:#e8d5b0;color:#5c3e1e}
-.l-sea{background:#a8cce0;color:#0d3050}
+.l-sky{background:#E5D0E3;color:#3a1f3a}
+.l-lake{background:#9297C4;color:#ffffff}
+.l-garden{background:#ADB993;color:#2a3a1e}
+.l-shore{background:#FED18C;color:#5c3e00}
+.l-sea{background:#90F1EF;color:#0a3a3a}
 .l-deep{background:#2d4a6e;color:#b8d4f0}
 
 /* HOME */
