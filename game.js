@@ -1916,8 +1916,8 @@ function loadData(callback) {
     .catch(function(e) {
       console.error('data.json読み込み失敗:', e);
       // フォールバック：最低限のデータをインラインで設定
-      LCOLOR={'空中都市':'#daedf7','湖':'#c8dff0','庭':'#c8deb8','浜辺':'#e8d5b0','海':'#a8cce0','深海':'#2d4a6e'};
-      LTEXT={'空中都市':'#1a4a6e','湖':'#1a3d5c','庭':'#2a5232','浜辺':'#5c3e1e','海':'#0d3050','深海':'#b8d4f0'};
+      LCOLOR={'空中都市':'#E5D0E3','湖':'#9297C4','庭':'#ADB993','浜辺':'#FED18C','海':'#07A0C3','深海':'#2d4a6e'};
+      LTEXT={'空中都市':'#3a1f3a','湖':'#ffffff','庭':'#2a3a1e','浜辺':'#5c3e00','海':'#ffffff','深海':'#b8d4f0'};
       LEMOJI={'空中都市':'🏰','湖':'🌊','庭':'🌿','浜辺':'🐚','海':'🐟','深海':'🦑'};
       LSTATS={'空中都市':{atk:8,def:6,spd:14,lck:12},'湖':{atk:6,def:12,spd:8,lck:14},'庭':{atk:10,def:10,spd:10,lck:10},'浜辺':{atk:8,def:8,spd:10,lck:14},'海':{atk:14,def:6,spd:12,lck:8},'深海':{atk:14,def:12,spd:6,lck:8}};
       BOTTLE_WORDS=[{word:'Traum',meaning:'夢',layer:'空中都市'},{word:'Schweigen',meaning:'沈黙',layer:'深海'},{word:'Welle',meaning:'波',layer:'浜辺'}];
