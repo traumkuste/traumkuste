@@ -87,7 +87,13 @@ function updateCounts() {
   }
 }
   // 展望台バッジ
-  var pending = G.words.filter(function(w){ return w.status !== '定着済み'; }).length;
+  var today = new Date().toLocaleDateString('ja-JP');
+var pending = G.words.filter(function(w){ 
+  return w.status !== '定着済み' && !G.quizDoneToday[w.word] && G.quizDoneDate === today;
+}).length;
+if (G.quizDoneDate !== today) {
+  pending = G.words.filter(function(w){ return w.status !== '定着済み'; }).length;
+}
   var badge = document.getElementById('quiz-badge');
   if (badge) {
     if (pending > 0) { badge.textContent = pending; badge.style.display = 'inline'; }
