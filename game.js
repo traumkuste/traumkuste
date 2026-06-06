@@ -1013,7 +1013,6 @@ function finishDungeon() {
     }
     G.logs.unshift({ time: now(), text: survivedNames + 'が' + dungState.dung.name + 'から帰還した。' });
     checkDungeonClear(dungState.dung.name);
-    checkPlayerLevel();
   }
   // 帰宅時に全員HP全快・探索フラグ解除
   dungState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
@@ -1021,6 +1020,7 @@ function finishDungeon() {
   G.lastBattleLog = dungState.battleLog.slice(); // 最新戦闘ログを保存
   renderLiveHP();
   saveGame();
+  checkPlayerLevel();
   setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
 }
 
