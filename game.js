@@ -1964,7 +1964,7 @@ function injectLayerCSS() {
 }
 
 function loadData(callback) {
-  fetch('data.json')
+  fetch('data.json?v=' + Date.now())
     .then(function(r){ return r.json(); })
     .then(function(d) {
       LCOLOR   = d.layers.color;
