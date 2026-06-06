@@ -1701,7 +1701,7 @@ function checkPlayerLevel() {
     }
 
     // ログに追加
-    var logText = sender.word + 'からメッセージが届いた。「' + msg.text + '」';
+    var logText = sender.word + 'が呟いた。「' + msg.text + '」';
     G.logs.unshift({ time: now(), text: logText, isLetter: true, read: false });
     setTimeout(function(t){ toast(t); }(logText.slice(0, 30) + '...'), lv * 500);
   }
