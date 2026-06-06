@@ -57,6 +57,10 @@ function showScreen(id) {
   var screens = document.querySelectorAll('.screen');
   for (var i = 0; i < screens.length; i++) screens[i].classList.remove('active');
   document.getElementById(id).classList.add('active');
+    if (dungState.active) {
+    showScreen('livelog-screen');
+    return;
+  }
   if (id === 'companions-screen') renderCompanions();
   if (id === 'sofa-screen') { renderSofa(); initDataManagement(); }
   if (id === 'bookshelf-screen') renderBookshelf();
