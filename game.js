@@ -41,6 +41,7 @@ var G = {
   quizDoneDate: '',
   bottleRecent: [],
   playerLevel: 1,
+  levelMsgSeen: {},  // 表示済みレベルメッセージ
   omiyageDate: '',  // 最後におみやげを受け取った日付
 };
 // ── UTILS ──
@@ -1794,6 +1795,7 @@ function renderInventory() {
       + '<div class="inv-icon">' + item.icon + '</div>'
       + '<div class="inv-name">' + item.name + '</div>'
       + '<div class="inv-type">' + item.type + '</div>'
+      + (item.desc ? '<div class="inv-desc">' + item.desc.replace(/\n/g, '<br>') + '</div>' : '')
       + '<div class="inv-qty">× ' + (item.qty || 1) + '</div>'
       + '</div>';
   }).join('');
@@ -2427,16 +2429,37 @@ var PLAYER_LEVEL_MESSAGES = {
   5:  { layer: '庭',   text: '今日の天気はどうだった？' },
   6:  { layer: null,    text: 'スキルの魂が見つかるといいのにな' },
   7:  { layer: '深海', text: '深いところには、まだ名前のないものがいる' },
-  8:  { layer: '湖',   text: '静かな日が続いている。君はどうだろう' },
+  8:  { layer: '湖',   text: '誰かが泳いで近づいてくる時もある。' },
   9:  { layer: null,    text: 'もうすぐ、新しい扉が開くかもしれない' },
   10: { layer: null,    text: 'ふぁーあ。あくびだよ' },
 };
 
 function checkPlayerLevel() {
-  // 旧呟きシステムは廃止。レベル追跡のみ維持
   if (!G.companions.length) return;
   var maxLevel = G.companions.reduce(function(mx, c){ return Math.max(mx, c.level || 1); }, 1);
   G.playerLevel = maxLevel;
+
+  // 各レベルのメッセージ（一度だけ）
+  if (!G.levelMsgSeen) G.levelMsgSeen = {};
+  for (var lv = 2; lv <= maxLevel; lv++) {
+    if (G.levelMsgSeen[lv]) continue;
+    var msg = PLAYER_LEVEL_MESSAGES[lv];
+    if (!msg) continue;
+
+    G.levelMsgSeen[lv] = true;
+
+    var sender = null;
+    if (msg.layer) {
+      var layerComps = G.companions.filter(function(c){ return c.layer === msg.layer; });
+      sender = layerComps.length ? rand(layerComps) : rand(G.companions);
+    } else {
+      sender = rand(G.companions);
+    }
+    var logText = sender.word + 'が呟いた。「' + msg.text + '」';
+    G.logs.unshift({ time: now(), text: logText, isLetter: true, read: false });
+    toast(logText.slice(0, 30) + '...');
+  }
+  saveGame();
 }
 
 function checkDungeonClear(dungName) {
@@ -2486,6 +2509,7 @@ function saveGame() {
       quizDoneDate: G.quizDoneDate,
       bottleRecent: G.bottleRecent || [],
       omiyageDate: G.omiyageDate || '',
+      levelMsgSeen: G.levelMsgSeen || {},
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -2519,6 +2543,7 @@ function loadGame() {
     G.quizDoneDate = data.quizDoneDate || '';
     G.bottleRecent = data.bottleRecent || [];
     G.omiyageDate = data.omiyageDate || '';
+    G.levelMsgSeen = data.levelMsgSeen || {};
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];

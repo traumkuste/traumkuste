@@ -28,7 +28,7 @@ body{background:#f5f0e8;font-family:Georgia,serif;display:flex;justify-content:c
 .layer-row:active{opacity:0.8}
 .layer-row .lname{font-size:14px;font-weight:700;letter-spacing:1px}
 .layer-row .ldesc{font-size:11px;opacity:.7;margin-top:2px}
-.layer-row .lcnt{font-size:11px;opacity:.6;margin-top:4px;}
+.layer-row .lcnt{font-size:11px;position:absolute;right:14px;top:50%;transform:translateY(-50%);opacity:.6}
 
 
 /* HOME */
@@ -252,3 +252,12 @@ body{background:#f5f0e8;font-family:Georgia,serif;display:flex;justify-content:c
 }
 .comp-card { transition: background 0.15s; }
 .comp-card:active { background: #f0e8d8; }
+
+/* 荷物のアイテム説明 */
+.inv-desc {
+  font-size: 10px;
+  color: #6b5e4e;
+  font-style: italic;
+  line-height: 1.5;
+  margin-top: 3px;
+}
