@@ -41,8 +41,12 @@ var G = {
   quizDoneDate: '',
   bottleRecent: [],
   playerLevel: 1,
+  diary: '',
+  hasDiary: false,
+  seenAdjectives: [],
   levelMsgSeen: {},  // 表示済みレベルメッセージ
   omiyageDate: '',  // 最後におみやげを受け取った日付
+  deepestFloor: 0,  // 水鏡の路の最深記録
 };
 // ── UTILS ──
 function toast(msg) {
@@ -1116,13 +1120,24 @@ function renderDungeon() {
   renderPartySlots();
   var el = document.getElementById('dlist');
   el.innerHTML = DUNGEONS.map(function(d) {
+    // 解放条件チェック
+    var isLocked = d.unlockAfter && G.clearedDungeons.indexOf(d.unlockAfter) < 0;
+    if (isLocked) {
+      return '<div class="dcard" style="opacity:0.45;pointer-events:none">'
+        + '<div class="dcard-name">🔒 ???</div>'
+        + '<div class="dcard-desc">' + d.unlockAfter + 'をクリアすると解放される</div>'
+        + '</div>';
+    }
+    var timeStr = d.type === 'floor'
+      ? '5階ごとに帰還判断 • 最深記録: ' + (G.deepestFloor || 0) + '階'
+      : '所要時間 約' + d.dur + '秒（実時間）• 敵' + d.encounters + '体';
     return '<div class="dcard' + (G.selDungeon && G.selDungeon.id === d.id ? ' sel' : '') + '" data-dung="' + d.id + '">'
       + '<div class="dcard-name">' + d.name + '</div>'
       + '<div class="dcard-desc">' + d.desc + '</div>'
-      + '<div class="dcard-time">所要時間 約' + d.dur + '秒（実時間）• 敵' + d.encounters + '体</div>'
+      + '<div class="dcard-time">' + timeStr + '</div>'
       + '</div>';
   }).join('');
-  document.querySelectorAll('.dcard').forEach(function(el) {
+  document.querySelectorAll('.dcard[data-dung]').forEach(function(el) {
     el.addEventListener('click', function() {
       var id = parseInt(this.getAttribute('data-dung'));
       G.selDungeon = DUNGEONS.find(function(d){ return d.id === id; });
@@ -1277,6 +1292,17 @@ function sendParty() {
   var dung = G.selDungeon;
   if (!party.length || !dung) return;
   party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = true; });
+
+  // フロアダンジョン（水鏡の路など）は専用ルートへ
+  if (dung.type === 'floor') {
+    G.party = [];
+    G.selDungeon = null;
+    startMirrorDungeon(party, dung);
+    if (typeof dungFx !== 'undefined') dungFx.start(dung.layer);
+    showScreen('livelog-screen');
+    return;
+  }
+
   var lightInv = G.inventory.find(function(i){ return i.name === '深海の灯り'; });
   var useLight = !!lightInv;
   if (useLight) { consumeItem('深海の灯り'); toast('深海の灯りを持って出発した。'); }
@@ -1288,7 +1314,7 @@ function sendParty() {
 }
 
 // ── LIVE DUNGEON ──
-var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [] };
+var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [], floorMode: false };
 
 function startDungeon(party, dung, dropBoost) {
   dungState.party = party;
@@ -1319,7 +1345,8 @@ function buildEvents(dung, party) {
   var events = [];
   var enc = dung.encounters;
   for (var i = 0; i < enc; i++) {
-    events.push({ time: Math.floor(dung.dur / (enc + 1) * (i + 1)), type: 'battle' });
+    var isBoss = (dung.layer === '深海' && i === enc - 1);
+    events.push({ time: Math.floor(dung.dur / (enc + 1) * (i + 1)), type: 'battle', boss: isBoss });
   }
   // 基本アイテムイベント（常に1回）
   events.push({ time: Math.floor(Math.random() * (dung.dur - 4)) + 2, type: 'item' });
@@ -1348,7 +1375,7 @@ function tickDungeon() {
   dungState.events.forEach(function(ev) {
     if (ev.time <= e && !ev.done) {
       ev.done = true;
-      if (ev.type === 'battle') triggerBattle();
+      if (ev.type === 'battle') triggerBattle(ev.boss);
       else triggerItem(ev.bonus || false);
     }
   });
@@ -1366,17 +1393,25 @@ function tickDungeon() {
 }
 
 // 戦闘：敵にHPを持たせ、どちらかが0になるまでターンを繰り返す
-function triggerBattle() {
+function triggerBattle(isBoss) {
   if (dungState.failed) return;
   var alive = dungState.party.filter(function(c){ return c.hp > 0; });
   if (!alive.length) { dungState.failed = true; return; }
   dungState.inBattle = true;
 
-  var enemy = rand(ENEMIES[dungState.dung.layer]);
+  var enemy = isBoss ? '深淵の王' : rand(ENEMIES[dungState.dung.layer]);
   var dungLayer = dungState.dung ? dungState.dung.layer : '浜辺';
   var enemyAtk, enemyDef, enemyHP;
   var isDeepSea = dungLayer === '深海';
-  if (dungLayer === '浜辺') {
+  // ── フロアモード（水鏡の路）の敵ステータス ──
+  if (dungState.floorMode) {
+    var f = mirrorState.floor;
+    var lakeEnemies = (ENEMIES['湖'] && ENEMIES['湖'].length) ? ENEMIES['湖'] : ['水鏡の幻', '揺らぐ影', '湖底の番人'];
+    if (!isBoss) enemy = rand(lakeEnemies);
+    enemyAtk = Math.floor(8 + f * 2.2) + Math.floor(Math.random() * 6);
+    enemyDef = Math.floor(4 + f * 1.3) + Math.floor(Math.random() * 4);
+    enemyHP  = Math.floor(70 + f * 22) + Math.floor(Math.random() * Math.max(20, f * 8));
+  } else if (dungLayer === '浜辺') {
     enemyAtk = 7 + Math.floor(Math.random() * 8);
     enemyDef = 5  + Math.floor(Math.random() * 5);
     enemyHP  = 60 + Math.floor(Math.random() * 50);  // 80-129
@@ -1384,14 +1419,24 @@ function triggerBattle() {
     enemyAtk = 13 + Math.floor(Math.random() * 10);
     enemyDef = 8  + Math.floor(Math.random() * 7);
     enemyHP  = 150 + Math.floor(Math.random() * 70); // 150-219
-  } else {
+  } else if (!isBoss) {
     enemyAtk = 18 + Math.floor(Math.random() * 14);
     enemyDef = 12 + Math.floor(Math.random() * 10);
     enemyHP  = 250 + Math.floor(Math.random() * 100); // 250-349
+  } else {
+    // 深淵の王（ボス）
+    enemyAtk = 28 + Math.floor(Math.random() * 12);
+    enemyDef = 18 + Math.floor(Math.random() * 8);
+    enemyHP  = 600 + Math.floor(Math.random() * 200);
   }
 
   dungState.currentEnemy = enemy;
-  addLL('battle', enemy + 'が現れた！');
+  if (isBoss) {
+    addLL('danger', '地鳴りがする。深淵の底から、何かが這い上がってきた。');
+    setTimeout(function(){ addLL('danger', '── 深淵の王 ──'); }, 400);
+  } else {
+    addLL('battle', enemy + 'が現れた！');
+  }
 
   // Sog発動チェック（先手で敵ATK削減）
   var sogUser = alive.find(function(c){ return c.skill === 'sog'; });
@@ -1418,6 +1463,7 @@ function triggerBattle() {
         dungState.failed = true;
         dungState.inBattle = false;
         addLL('danger', '誰も立っていない。扉の向こうから、静かに戻ってきた…');
+        if (dungState.floorMode) { finishMirrorDungeon(false); return; }
         if (dungState.pendingFinish) finishDungeon();
         return;
       }
@@ -1461,8 +1507,9 @@ function triggerBattle() {
         var lastHitter = fighters[fighters.length-1];
         addLL('battle', enemy + 'を倒した！');
         // Talerドロップ（gierig装備で増える）
-        var tBase = isDeepSea ? 15 + Math.floor(Math.random()*16)
-          : (dungLayer === '海' ? 8 + Math.floor(Math.random()*9) : 4 + Math.floor(Math.random()*5));
+        var tBase = dungState.floorMode ? (5 + Math.floor(mirrorState.floor * 1.5) + Math.floor(Math.random() * 8))
+          : (isDeepSea ? 15 + Math.floor(Math.random()*16)
+          : (dungLayer === '海' ? 8 + Math.floor(Math.random()*9) : 4 + Math.floor(Math.random()*5)));
         var greed = 0;
         fighters.forEach(function(c){ var gfx = equipFx(c); if (gfx.greed) greed = Math.max(greed, gfx.greed); });
         var talerGain = Math.round(tBase * (1 + greed));
@@ -1484,12 +1531,18 @@ function triggerBattle() {
         dungState.inBattle = false;
         dungState.currentEnemy = null;
         renderLiveHP();
+        // フロアモードは次の階へ進む
+        if (dungState.floorMode) {
+          if (Math.random() < 0.55) triggerFloorItem();
+          setTimeout(onFloorBattleClear, 700);
+          return;
+        }
         if (dungState.pendingFinish) finishDungeon();
         return;
       }
 
       // ── 敵の反撃 ──
-      var isAOE = isDeepSea && Math.random() < 0.3; // 深海は30%で全体攻撃
+      var isAOE = (isDeepSea && Math.random() < 0.3) || (dungState.floorMode && mirrorState.floor >= 15 && Math.random() < 0.25);
       if (isAOE) {
         // 全体攻撃
         addLL('danger', enemy + 'の全体攻撃！');
@@ -1547,6 +1600,7 @@ function triggerBattle() {
         dungState.failed = true;
         dungState.inBattle = false;
         addLL('danger', '誰も立っていない。扉の向こうから、静かに戻ってきた…');
+        if (dungState.floorMode) { finishMirrorDungeon(false); return; }
         if (dungState.pendingFinish) finishDungeon();
         return;
       }
@@ -1646,6 +1700,7 @@ var ENEMY_PAL = {
   '浜辺': {main:'#c8a87a', accent:'#e8d4b0', dark:'#5c3e00', bg:'#DFCBA9'},
   '海':   {main:'#1d6e8a', accent:'#5abcdc', dark:'#0a2a3c', bg:'#508CA4'},
   '深海': {main:'#1a3a6e', accent:'#4a8ab0', dark:'#020818', bg:'#0A122A'},
+  '湖':   {main:'#5a4aaa', accent:'#c8c0f0', dark:'#1a1040', bg:'#CEC7E2'},
 };
 function enemySpriteURL(name, layer) {
   if (ENEMY_SPRITES[name]) return ENEMY_SPRITES[name];
@@ -1700,6 +1755,7 @@ var ENEMY_EMOJI = {
   '砂浜の亡霊': '👻', '潮の番人': '🦀', '流木の怪': '🪵',
   '珊瑚の守護者': '🪸', '光る深魚': '🐠', '海流の精': '🌊',
   '深淵の番人': '🦑', '忘却の影': '🌑', '原初の怪魚': '🐟',
+  '水鏡の霊': '🪞', '湖底の番人': '🐊', '揺らぐ影': '👁️',
 };
 
 function renderLiveHP() {
@@ -1783,6 +1839,169 @@ function now() {
   return new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
 }
 
+// ══════════════════════════════════════════════
+//  水鏡の路 — フロア制ダンジョンシステム
+// ══════════════════════════════════════════════
+var mirrorState = {
+  active: false, floor: 0, party: [], sessionItems: [],
+  dung: null, failed: false, paused: false, checkpointEvery: 5
+};
+
+function startMirrorDungeon(party, dung) {
+  // dungState を戦闘エンジンとして再利用
+  dungState.party = party;
+  dungState.dung = dung;
+  dungState.elapsed = 0;
+  dungState.duration = 999999; // タイムアップなし
+  dungState.failed = false;
+  dungState.inBattle = false;
+  dungState.pendingFinish = false;
+  dungState.herbUsed = false;
+  dungState.dropBoost = false;
+  dungState.active = true;
+  dungState.startedAt = Date.now();
+  dungState.battleLog = [];
+  dungState.sessionItems = [];
+  dungState.events = []; // 時間イベントなし
+  dungState.floorMode = true;
+  if (dungState.interval) clearInterval(dungState.interval);
+
+  mirrorState.active = true;
+  mirrorState.floor = 0;
+  mirrorState.party = party;
+  mirrorState.sessionItems = [];
+  mirrorState.dung = dung;
+  mirrorState.failed = false;
+  mirrorState.paused = false;
+  mirrorState.checkpointEvery = dung.checkpointEvery || 5;
+
+  document.getElementById('ll-title').textContent = '水鏡の路';
+  document.getElementById('ll-scroll').innerHTML = '';
+  document.getElementById('ll-timer').textContent = '0階';
+  renderLiveHP();
+  addLL('normal', '水面に踏み込む。鏡のような静けさが、足元に広がっている。');
+  setTimeout(runNextMirrorFloor, 1800);
+}
+
+function runNextMirrorFloor() {
+  if (!mirrorState.active || mirrorState.failed || mirrorState.paused) return;
+  mirrorState.floor++;
+  var timerEl = document.getElementById('ll-timer');
+  if (timerEl) timerEl.textContent = mirrorState.floor + '階';
+  dungState.herbUsed = false;
+  addLL('normal', '── ' + mirrorState.floor + '階 ──');
+  triggerBattle(false);
+}
+
+function onFloorBattleClear() {
+  if (!mirrorState.active || mirrorState.failed) return;
+  var floor = mirrorState.floor;
+  if (floor > (G.deepestFloor || 0)) G.deepestFloor = floor;
+  if (floor % mirrorState.checkpointEvery === 0) {
+    setTimeout(showMirrorCheckpoint, 700);
+  } else {
+    setTimeout(runNextMirrorFloor, 1400);
+  }
+}
+
+var MIRROR_PROPHECY = [
+  '水面に小さな波紋が広がった。この先に、何かの気配がある。',
+  '水鏡が一瞬揺らいだ。奥から、冷たい光が差し込んでくる。',
+  '鏡の底で、星のような光が見えた。手が届きそうな気がする。',
+  'ここより先は、言葉も届かない場所だ。それでも、進むか？',
+  '水鏡はあなたの顔を映した。その瞳の奥に、何が見えるか。',
+];
+
+function showMirrorCheckpoint() {
+  mirrorState.paused = true;
+  var floor = mirrorState.floor;
+  var idx = Math.min(Math.floor(floor / mirrorState.checkpointEvery) - 1, MIRROR_PROPHECY.length - 1);
+  var prophecy = MIRROR_PROPHECY[Math.max(0, idx)];
+  document.getElementById('mirror-floor-text').textContent = floor + '階';
+  document.getElementById('mirror-prophecy').textContent = prophecy;
+  document.getElementById('mirror-modal').style.display = 'flex';
+  addLL('normal', '── 水鏡 ──');
+  addLL('normal', prophecy);
+}
+
+function mirrorReturn() {
+  document.getElementById('mirror-modal').style.display = 'none';
+  finishMirrorDungeon(true);
+}
+
+function mirrorContinue() {
+  document.getElementById('mirror-modal').style.display = 'none';
+  mirrorState.paused = false;
+  addLL('normal', 'さらに深く潜る決意をした。');
+  setTimeout(runNextMirrorFloor, 1000);
+}
+
+function triggerFloorItem() {
+  var pool = DROPS['湖'];
+  if (!pool || !pool.length) return;
+  var floor = mirrorState.floor;
+  var alive = mirrorState.party.filter(function(c){ return c.hp > 0; });
+  var lckFinder = alive.slice().sort(function(a,b){ return (b.stats.lck||0)-(a.stats.lck||0); })[0] || mirrorState.party[0];
+  var finder = alive[0] || mirrorState.party[0];
+  var item = Object.assign({}, weightedRand(pool));
+  if (item.type === '生成装備') {
+    var gDepth = Math.min(2, Math.floor(floor / 5));
+    item = genEquip(gDepth, lckFinder ? (lckFinder.stats.lck || 0) : 0);
+    if (item.rare || item.tier === 2) addLL('success', '✨ ただならぬ気配を放つ装備だ。');
+  }
+  addLL('item', finder.word + 'が ' + item.icon + '「' + item.name + '」を見つけた。');
+  var existing = G.inventory.find(function(i){ return i.name === item.name; });
+  if (existing) existing.qty = (existing.qty || 1) + 1;
+  else { item.qty = 1; G.inventory.push(item); }
+  mirrorState.sessionItems.push(item.name);
+  dungState.sessionItems.push(item.name);
+}
+
+function finishMirrorDungeon(success) {
+  mirrorState.active = false;
+  mirrorState.paused = false;
+  dungState.floorMode = false;
+  dungState.active = false;
+  document.getElementById('mirror-modal').style.display = 'none';
+
+  var allNames = mirrorState.party.map(function(c){ return c.word; }).join('・');
+  var survived = mirrorState.party.filter(function(c){ return c.hp > 0; });
+  var reachedFloor = mirrorState.floor;
+
+  if (!success || !survived.length) {
+    var lost = mirrorState.sessionItems || [];
+    lost.forEach(function(name) {
+      var inv = G.inventory.find(function(i){ return i.name === name; });
+      if (inv) {
+        inv.qty = (inv.qty || 1) - 1;
+        if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
+      }
+    });
+    addLL('danger', allNames + 'は倒れ、水面に浮かんで戻ってきた…');
+    if (lost.length) addLL('danger', '持ち帰るはずだった荷物は、水底に沈んだ。');
+    G.logs.unshift({ time: now(), text: allNames + 'は水鏡の路 ' + reachedFloor + '階で力尽きた。' });
+  } else {
+    var survivedNames = survived.map(function(c){ return c.word; }).join('・');
+    var isRecord = reachedFloor >= (G.deepestFloor || 0);
+    addLL('success', survivedNames + 'は水鏡を抜けて、無事に帰還した。');
+    addLL('normal', '到達階: ' + reachedFloor + '階' + (isRecord ? '　（最深記録）' : ''));
+    G.logs.unshift({ time: now(), text: survivedNames + 'が水鏡の路 ' + reachedFloor + '階から帰還した。' });
+    if (G.clearedDungeons.indexOf('水鏡の路') < 0) {
+      G.clearedDungeons.push('水鏡の路');
+      G.bottleLimit = (G.bottleLimit || 6) + 3;
+      toast('新しい瓶が流れ着くようになった。（上限+3）');
+    }
+  }
+
+  mirrorState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
+  G.lastBattleLog = dungState.battleLog.slice();
+  if (typeof dungFx !== 'undefined') dungFx.stop();
+  renderLiveHP();
+  saveGame();
+  checkPlayerLevel();
+  setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
+}
+
 // ── INVENTORY ──
 function renderInventory() {
   var el = document.getElementById('inv-grid');
@@ -1818,6 +2037,7 @@ function renderCraftArea() {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
     '深海': ['深海の結晶','暗闇の欠片'],
+    '湖':   ['湖底の結晶','水鏡の欠片'],
   };
   var craftable = [];
   Object.keys(LAYER_MAT).forEach(function(layer) {
@@ -1863,6 +2083,7 @@ function craftEvoStone(layer) {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
     '深海': ['深海の結晶','暗闇の欠片'],
+    '湖':   ['湖底の結晶','水鏡の欠片'],
   };
   var mats = LAYER_MAT[layer];
   var consumed = 0;
@@ -2335,6 +2556,17 @@ function initDataManagement() {
 // ── ソファ ──
 function renderSofa() {
   updatePlayerName();
+  // 日記帳セクション
+  var diaryEl = document.getElementById('sofa-diary');
+  if (diaryEl) {
+    if (G.hasDiary) {
+      diaryEl.style.display = 'block';
+      var ta = document.getElementById('diary-textarea');
+      if (ta) ta.value = G.diary || '';
+    } else {
+      diaryEl.style.display = 'none';
+    }
+  }
   var wordsEl = document.getElementById('sofa-words');
   var logsEl = document.getElementById('sofa-logs');
   if (!wordsEl || !logsEl) return;
@@ -2404,6 +2636,48 @@ function renderLaterneShop() {
       });
     });
   }
+}
+
+// ── 日記帳の購入 ──
+function buyDiary() {
+  if (G.hasDiary) { toast('すでに日記帳を持っている'); return; }
+  if (G.taler < 200) { toast('Talerが足りない'); return; }
+  G.taler -= 200;
+  G.hasDiary = true;
+  updateCounts();
+  renderLaterneShop();
+  toast('日記帳を手に入れた。ソファから書ける。');
+  saveGame();
+}
+
+// ── 暗号の紙片の購入 ──
+function buyCipher() {
+  if (G.taler < 80) { toast('Talerが足りない'); return; }
+  var EG = EQUIPGEN || DEFAULT_EQUIPGEN;
+  var allAdjs = (EG.adjectives || []).concat(EG.rareAdjectives || []);
+  var unseen = allAdjs.filter(function(a) {
+    return G.seenAdjectives.indexOf(a.forms[0]) < 0;
+  });
+  if (!unseen.length) { toast('すべての形容詞を知っている'); return; }
+  G.taler -= 80;
+  var picked = unseen[Math.floor(Math.random() * unseen.length)];
+  G.seenAdjectives.push(picked.forms[0]);
+  updateCounts();
+  renderLaterneShop();
+  saveGame();
+  // 紙片演出
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,22,40,0.85);z-index:200;display:flex;align-items:center;justify-content:center';
+  var card = document.createElement('div');
+  card.style.cssText = 'background:#1a3050;border:1px solid #5a8ab0;border-radius:16px;padding:32px 28px;max-width:300px;text-align:center;color:#b8d4f0';
+  card.innerHTML = '<div style="font-size:11px;letter-spacing:2px;color:#5a8ab0;margin-bottom:12px">暗号の紙片</div>'
+    + '<div style="font-size:10px;color:#7a9ab8;margin-bottom:16px;font-style:italic">紙片を広げた。</div>'
+    + '<div style="font-size:28px;letter-spacing:3px;margin-bottom:8px">' + picked.forms[0] + '</div>'
+    + '<div style="font-size:12px;color:#5a8ab0;margin-bottom:4px">' + picked.forms[1] + ' → ' + picked.forms[2] + '</div>'
+    + '<div style="font-size:11px;color:#7a9ab8;font-style:italic;margin-top:16px">効果は不明。この言葉を宿した装備を見つければわかるかもしれない。</div>'
+    + '<div style="margin-top:20px"><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:#2d6a8f;color:#e8f4fc;border:none;border-radius:20px;padding:8px 24px;font-size:13px;cursor:pointer;font-family:Georgia,serif">閉じる</button></div>';
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
 }
 
 function buyItem(name, price, type, props) {
@@ -2503,6 +2777,9 @@ function saveGame() {
       taler: G.taler,
       laterneUnlocked: G.laterneUnlocked,
       clearedDungeons: G.clearedDungeons,
+      diary: G.diary || '',
+      hasDiary: G.hasDiary || false,
+      seenAdjectives: G.seenAdjectives || [],
       lastBattleLog: G.lastBattleLog,
       bottleLimit: G.bottleLimit,
       quizDoneToday: G.quizDoneToday,
@@ -2510,6 +2787,7 @@ function saveGame() {
       bottleRecent: G.bottleRecent || [],
       omiyageDate: G.omiyageDate || '',
       levelMsgSeen: G.levelMsgSeen || {},
+      deepestFloor: G.deepestFloor || 0,
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -2537,6 +2815,9 @@ function loadGame() {
     G.taler = data.taler || 0;
     G.laterneUnlocked = data.laterneUnlocked || false;
     G.clearedDungeons = data.clearedDungeons || [];
+    G.diary = data.diary || '';
+    G.hasDiary = data.hasDiary || false;
+    G.seenAdjectives = data.seenAdjectives || [];
     G.lastBattleLog = data.lastBattleLog || [];
     G.bottleLimit = data.bottleLimit !== undefined ? data.bottleLimit : 6;
     G.quizDoneToday = data.quizDoneToday || {};
@@ -2544,6 +2825,7 @@ function loadGame() {
     G.bottleRecent = data.bottleRecent || [];
     G.omiyageDate = data.omiyageDate || '';
     G.levelMsgSeen = data.levelMsgSeen || {};
+    G.deepestFloor = data.deepestFloor || 0;
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
@@ -2692,6 +2974,15 @@ function bindAll() {
   });
   document.getElementById('btn-buy-light').addEventListener('click', function(){
     buyItem('深海の灯り', 20, '消耗品', {type:'消耗品', icon:'🔦', desc:'次のダンジョンでアイテムドロップ率UP'});
+  });
+  document.getElementById('btn-buy-diary').addEventListener('click', buyDiary);
+  document.getElementById('btn-buy-cipher').addEventListener('click', buyCipher);
+  // 日記の保存
+  document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'diary-textarea') {
+      G.diary = e.target.value.slice(0, 600);
+      saveGame();
+    }
   });
   document.getElementById('btn-send').addEventListener('click', sendParty);
 }
