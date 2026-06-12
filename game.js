@@ -98,7 +98,7 @@ function spriteURL(word, article, layer, level) {
     }
   }
   var eyeY = 5 + Math.floor(rnd() * 3), eyeX = 4 + Math.floor(rnd() * 2);
-  if (detail >= 1) { grid[eyeY][eyeX] = 3; grid[eyeY][15 - eyeX] = 3; }
+  grid[eyeY][eyeX] = 3; grid[eyeY][15 - eyeX] = 3; // 常に目を表示
   var cv = document.createElement('canvas'); cv.width = 16; cv.height = 16;
   var ctx = cv.getContext('2d');
   for (y = 0; y < H; y++) {
@@ -1414,20 +1414,20 @@ function triggerBattle(isBoss) {
   } else if (dungLayer === '浜辺') {
     enemyAtk = 7 + Math.floor(Math.random() * 8);
     enemyDef = 5  + Math.floor(Math.random() * 5);
-    enemyHP  = 60 + Math.floor(Math.random() * 50);  // 80-129
+    enemyHP  = 60 + Math.floor(Math.random() * 50);  // 変更なし
   } else if (dungLayer === '海') {
-    enemyAtk = 13 + Math.floor(Math.random() * 10);
-    enemyDef = 8  + Math.floor(Math.random() * 7);
-    enemyHP  = 150 + Math.floor(Math.random() * 70); // 150-219
+    enemyAtk = 16 + Math.floor(Math.random() * 12);  // +3 (~20%強化)
+    enemyDef = 10 + Math.floor(Math.random() * 8);   // +2 (~20%強化)
+    enemyHP  = 180 + Math.floor(Math.random() * 85); // +30 (~20%強化)
   } else if (!isBoss) {
-    enemyAtk = 18 + Math.floor(Math.random() * 14);
-    enemyDef = 12 + Math.floor(Math.random() * 10);
-    enemyHP  = 250 + Math.floor(Math.random() * 100); // 250-349
+    enemyAtk = 21 + Math.floor(Math.random() * 16);  // +3 (~17%強化)
+    enemyDef = 14 + Math.floor(Math.random() * 12);  // +2 (~17%強化)
+    enemyHP  = 290 + Math.floor(Math.random() * 115); // +40 (~16%強化)
   } else {
     // 深淵の王（ボス）
-    enemyAtk = 28 + Math.floor(Math.random() * 12);
-    enemyDef = 18 + Math.floor(Math.random() * 8);
-    enemyHP  = 600 + Math.floor(Math.random() * 200);
+    enemyAtk = 32 + Math.floor(Math.random() * 14);  // +4 (~14%強化)
+    enemyDef = 21 + Math.floor(Math.random() * 10);  // +3 (~17%強化)
+    enemyHP  = 700 + Math.floor(Math.random() * 230); // +100 (~17%強化)
   }
 
   dungState.currentEnemy = enemy;
@@ -1782,10 +1782,13 @@ function renderLiveHP() {
       return '<span title="' + c.word + '" style="' + animStyle + '">'
         + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:28px;height:28px;image-rendering:pixelated;vertical-align:middle" alt=""></span>';
     }).join('');
-    var enemyEmoji = dungState.currentEnemy ? (ENEMY_EMOJI[dungState.currentEnemy] || '👾') : '';
-    var vsStr = dungState.inBattle && enemyEmoji
-      ? '<span style="font-size:16px;color:#5a8ab0;margin:0 6px">⚔️</span><span>' + enemyEmoji + '</span>'
-      : '';
+    var vsStr = '';
+    if (dungState.inBattle && dungState.currentEnemy) {
+      var _eLayer = dungState.dung ? dungState.dung.layer : '浜辺';
+      var _eSrc = enemySpriteURL(dungState.currentEnemy, _eLayer);
+      vsStr = '<span style="font-size:16px;color:#5a8ab0;margin:0 6px">⚔️</span>'
+        + '<img src="' + _eSrc + '" style="width:36px;height:36px;image-rendering:pixelated;vertical-align:middle" title="' + dungState.currentEnemy + '" alt="">';
+    }
     iconEl.innerHTML = partyIcons + vsStr;
   }
 }
@@ -2682,8 +2685,12 @@ function buyCipher() {
 
 function buyItem(name, price, type, props) {
   if (G.taler < price) { toast('Talerが足りない'); return; }
-  G.taler -= price;
+  // 消耗品の所持上限チェック（最大3個）
   var existing = G.inventory.find(function(i){ return i.name === name; });
+  if (existing && (existing.qty || 1) >= 3) {
+    toast(name + 'は3個まで持てます'); return;
+  }
+  G.taler -= price;
   if (existing) existing.qty = (existing.qty||1) + 1;
   else {
     var item = Object.assign({ name: name, qty: 1 }, props);
@@ -2970,10 +2977,10 @@ function bindAll() {
   document.getElementById('btn-dung-back').addEventListener('click', function(){ showScreen('home-screen'); });
   document.getElementById('btn-laterne-back').addEventListener('click', function(){ showScreen('world-screen'); });
   document.getElementById('btn-buy-herb').addEventListener('click', function(){
-    buyItem('塩漬けの薬草', 15, '消耗品', {type:'消耗品', icon:'🌿', desc:'HP半分以下で自動30回復（消耗品）'});
+    buyItem('塩漬けの薬草', 100, '消耗品', {type:'消耗品', icon:'🌿', desc:'HP半分以下で自動30回復（消耗品）'});
   });
   document.getElementById('btn-buy-light').addEventListener('click', function(){
-    buyItem('深海の灯り', 20, '消耗品', {type:'消耗品', icon:'🔦', desc:'次のダンジョンでアイテムドロップ率UP'});
+    buyItem('深海の灯り', 150, '消耗品', {type:'消耗品', icon:'🔦', desc:'次のダンジョンでアイテムドロップ率UP'});
   });
   document.getElementById('btn-buy-diary').addEventListener('click', buyDiary);
   document.getElementById('btn-buy-cipher').addEventListener('click', buyCipher);
