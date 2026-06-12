@@ -1314,7 +1314,7 @@ function sendParty() {
 }
 
 // ── LIVE DUNGEON ──
-var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [], floorMode: false };
+var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [], floorMode: false, levelUps: [] };
 
 function startDungeon(party, dung, dropBoost) {
   dungState.party = party;
@@ -1330,6 +1330,7 @@ function startDungeon(party, dung, dropBoost) {
   dungState.startedAt = Date.now();
   dungState.battleLog = [];
   dungState.sessionItems = [];
+  dungState.levelUps = [];
   dungState.events = buildEvents(dung, party);
 
   document.getElementById('ll-title').textContent = dung.name + ' を探索中';
@@ -1524,6 +1525,9 @@ function triggerBattle(isBoss) {
             c.level++;
             c.stats.atk += 2; c.stats.def += 2; c.stats.spd += 1; c.stats.lck += 1;
             c.maxHP += 6; c.hp = Math.min(c.hp + 6, c.maxHP);
+            // 帰還後ポップアップのためにキューへ積む
+            if (!dungState.levelUps) dungState.levelUps = [];
+            dungState.levelUps.push({ word: c.word, level: c.level });
             setTimeout(function(){ if (dungState.active) addLL('normal', c.word + 'はレベルアップした。（Lv.' + c.level + '）'); }, 300);
           }
         });
@@ -1827,7 +1831,6 @@ function finishDungeon() {
     G.logs.unshift({ time: now(), text: survivedNames + 'が' + dungState.dung.name + 'から帰還した。' });
     checkDungeonClear(dungState.dung.name);
   }
-  // 帰宅時に全員HP全快・探索フラグ解除
   dungState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
   dungState.active = false;
   G.lastBattleLog = dungState.battleLog.slice(); // 最新戦闘ログを保存
@@ -1835,7 +1838,14 @@ function finishDungeon() {
   renderLiveHP();
   saveGame();
   checkPlayerLevel();
-  setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
+  // レベルアップポップアップをキューから順に表示
+  var lvQueue = (dungState.levelUps || []).slice();
+  dungState.levelUps = [];
+  if (lvQueue.length > 0) {
+    setTimeout(function(){ startLevelUpQueue(lvQueue); }, 800);
+  } else {
+    setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
+  }
 }
 
 function now() {
@@ -1865,6 +1875,7 @@ function startMirrorDungeon(party, dung) {
   dungState.startedAt = Date.now();
   dungState.battleLog = [];
   dungState.sessionItems = [];
+  dungState.levelUps = [];
   dungState.events = []; // 時間イベントなし
   dungState.floorMode = true;
   if (dungState.interval) clearInterval(dungState.interval);
@@ -2002,7 +2013,14 @@ function finishMirrorDungeon(success) {
   renderLiveHP();
   saveGame();
   checkPlayerLevel();
-  setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
+  // レベルアップポップアップをキューから順に表示
+  var lvQueue = (dungState.levelUps || []).slice();
+  dungState.levelUps = [];
+  if (lvQueue.length > 0) {
+    setTimeout(function(){ startLevelUpQueue(lvQueue); }, 800);
+  } else {
+    setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
+  }
 }
 
 // ── INVENTORY ──
@@ -3279,3 +3297,52 @@ var dungFx = (function() {
     }
   };
 })();
+
+// ──────────────────────────────────────────────
+//  レベルアップポップアップ
+// ──────────────────────────────────────────────
+var _lvQueue = [];
+
+function startLevelUpQueue(queue) {
+  _lvQueue = queue || [];
+  showNextLevelUpPopup();
+}
+
+function showNextLevelUpPopup() {
+  if (!_lvQueue.length) {
+    // キューが空になったらトースト
+    toast('探索完了！ログを確認しよう');
+    return;
+  }
+  var entry = _lvQueue.shift(); // { word, level }
+  // G.companionsから該当仲間を探す
+  var c = G.companions.find(function(x){ return x.word === entry.word; });
+  if (!c) { showNextLevelUpPopup(); return; } // 見つからなければスキップ
+
+  var popup = document.getElementById('levelup-popup');
+  var layerColor = LCOLOR[c.layer] || '#c8b89a';
+
+  // アバター（大きめ・64px）
+  var avatarEl = document.getElementById('levelup-avatar');
+  avatarEl.innerHTML = '<div style="background:' + layerColor + ';width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #fff,0 0 0 6px ' + layerColor + '44">'
+    + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:46px;height:46px;image-rendering:pixelated" alt="">'
+    + '</div>';
+
+  // 仲間名・レベル
+  document.getElementById('levelup-name').textContent = c.word;
+  document.getElementById('levelup-lv').textContent = 'Lv. ' + c.level + ' になった';
+
+  // セリフ
+  var speech = companionSpeech(c);
+  document.getElementById('levelup-speech').textContent = speech || '';
+
+  // 表示
+  popup.style.display = 'flex';
+}
+
+function closeLevelUpPopup() {
+  var popup = document.getElementById('levelup-popup');
+  popup.style.display = 'none';
+  // 次のポップアップへ（少し間を置く）
+  setTimeout(showNextLevelUpPopup, 300);
+}
