@@ -2094,7 +2094,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材5個以上あれば錬成可能
+  // 層ごとに素材10個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -2109,7 +2109,7 @@ function renderCraftArea() {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (inv) total += (inv.qty || 1);
     });
-    if (total >= 5) craftable.push(layer);
+    if (total >= 10) craftable.push(layer);
   });
 
   var container = document.getElementById('inv-grid').parentElement;
@@ -2118,14 +2118,14 @@ function renderCraftArea() {
   div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
 
   if (!craftable.length) {
-    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が2個以上揃うと、ここで進化の石を錬成できます</div>';
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が10個以上揃うと、ここで進化の石を錬成できます</div>';
   } else {
     div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">⚗️ 進化の石を錬成する</div>'
       + craftable.map(function(layer) {
         return '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer" data-craft-layer="' + layer + '">'
           + '<span style="font-size:22px">💠</span>'
           + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + layer + 'の進化の石</div>'
-          + '<div style="font-size:10px;color:#6b5e4e">素材×5 → 進化の石×1</div></div>'
+          + '<div style="font-size:10px;color:#6b5e4e">素材×10 → 進化の石×1</div></div>'
           + '<div style="font-size:11px;color:#7b9e87">錬成する</div>'
           + '</div>';
       }).join('');
@@ -2150,14 +2150,14 @@ function craftEvoStone(layer) {
   var mats = LAYER_MAT[layer];
   var consumed = 0;
   mats.forEach(function(name) {
-    while (consumed < 5) {
+    while (consumed < 10) {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (!inv || inv.qty <= 0) break;
       inv.qty--; consumed++;
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 5) { toast('素材が足りません'); return; }
+  if (consumed < 10) { toast('素材が足りません'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
