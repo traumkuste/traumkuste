@@ -441,19 +441,40 @@
   </div>
 </div>
 
-<!-- ===== 人魚の部屋モーダル ===== -->
-<div id="mirror-room-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(40,20,60,0.88);z-index:600;align-items:center;justify-content:center">
-  <div style="background:linear-gradient(160deg,#1a0a2e 0%,#2a1050 40%,#0d2040 100%);border:1px solid #8060c0;border-radius:20px;width:92%;max-width:340px;padding:26px 20px 24px;text-align:center;box-shadow:0 0 60px rgba(140,80,220,0.22);max-height:92vh;overflow-y:auto">
-    <div style="font-size:10px;letter-spacing:4px;color:#604880;margin-bottom:10px">M E E R J U N G F R A U</div>
-    <div style="font-size:28px;margin-bottom:8px">🧜</div>
-    <div style="font-size:16px;color:#d8b8f8;font-style:italic;margin-bottom:16px;letter-spacing:1px">人魚のドレッサー</div>
-    <div id="mirror-room-sprites" style="display:flex;justify-content:center;gap:10px;min-height:50px;margin-bottom:14px;flex-wrap:wrap"></div>
-    <div id="mirror-room-dresser" style="background:rgba(100,60,180,0.18);border:1px solid #6040a0;border-radius:14px;padding:16px 14px;margin-bottom:18px;cursor:pointer" onclick="openDresserDrawer()">
-      <div style="font-size:22px;margin-bottom:6px">🪟</div>
-      <div style="font-size:12px;color:#a080e0;font-style:italic">引き出しをそっと開ける</div>
+<!-- ===== 人魚の部屋（専用スクリーン） ===== -->
+<div id="mirror-room-screen" class="screen" style="background:linear-gradient(180deg,#0a0520 0%,#150838 35%,#0a1830 70%,#060e20 100%);position:relative;overflow:hidden">
+  <!-- 星のカーテン（canvas） -->
+  <canvas id="mirror-room-stars" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0"></canvas>
+
+  <div style="position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh;padding-bottom:20px">
+    <!-- ヘッダー -->
+    <div style="padding:14px 16px 0;display:flex;align-items:center;gap:10px">
+      <button onclick="closeMirrorRoomScreen()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#a080c8;font-family:Georgia,serif;padding:4px 8px">←</button>
+      <div style="font-size:10px;letter-spacing:4px;color:#604880">M E E R J U N G F R A U</div>
     </div>
-    <div id="mirror-room-drawer-text" style="display:none;font-size:13px;color:#c8a8f0;line-height:1.85;font-style:italic;margin-bottom:18px;padding:0 4px"></div>
-    <button onclick="closeMirrorRoom()" style="background:#3a1a60;border:1px solid #6040a0;border-radius:14px;padding:11px 32px;color:#d0a8f8;font-size:14px;cursor:pointer;font-family:Georgia,serif">戻る</button>
+
+    <!-- 仲間スプライトエリア -->
+    <div id="mirror-room-sprites" style="display:flex;justify-content:center;gap:16px;padding:20px 16px 0;flex-wrap:wrap;min-height:90px"></div>
+
+    <!-- 仲間のセリフ -->
+    <div id="mirror-room-speech" style="text-align:center;font-size:13px;color:#c8a8f0;font-style:italic;min-height:28px;padding:8px 24px;line-height:1.7"></div>
+
+    <!-- 部屋の中心：ドレッサー + 宝貝 -->
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 20px;gap:14px">
+
+      <!-- ドレッサー -->
+      <div id="mirror-room-dresser" onclick="openDresserDrawer()" style="background:rgba(80,40,140,0.22);border:1px solid #7050b0;border-radius:18px;padding:20px 24px;text-align:center;cursor:pointer;width:100%;max-width:260px;transition:background 0.2s">
+        <div style="font-size:40px;margin-bottom:8px">🪞</div>
+        <div style="font-size:14px;color:#d8b8f8;font-style:italic;margin-bottom:4px">人魚のドレッサー</div>
+        <div style="font-size:11px;color:#8060b0">引き出しをそっと開ける</div>
+      </div>
+
+      <!-- 引き出しテキスト -->
+      <div id="mirror-room-drawer-text" style="display:none;background:rgba(60,20,100,0.35);border:1px solid #6040a0;border-radius:14px;padding:16px 18px;font-size:13px;color:#e0c0ff;line-height:1.9;font-style:italic;text-align:center;width:100%;max-width:260px"></div>
+
+      <!-- 宝貝エリア -->
+      <div id="mirror-room-shells" style="display:flex;gap:16px;justify-content:center;margin-top:4px"></div>
+    </div>
   </div>
 </div>
 

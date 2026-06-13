@@ -808,8 +808,16 @@ function initQuiz() {
     G.quizDoneToday = {};
     G.quizDoneDate = today;
   }
+  var now_ms = Date.now();
+  var HALF_DAY = 12 * 60 * 60 * 1000;
+  var FULL_DAY = 24 * 60 * 60 * 1000;
   var pending = G.words.filter(function(w){
-    return w.status !== '定着済み' && !G.quizDoneToday[w.word];
+    if (w.status === '定着済み') return false;
+    if (G.quizDoneToday[w.word]) return false;
+    // 時間ゲートチェック：まだ答えられない問題は除外
+    if (w.correctCount === 1 && w.lastCorrectAt && (now_ms - w.lastCorrectAt < HALF_DAY)) return false;
+    if (w.correctCount === 2 && w.firstCorrectAt && (now_ms - w.firstCorrectAt < FULL_DAY)) return false;
+    return true;
   });
   if (!pending.length) {
     var allPending = G.words.filter(function(w){ return w.status !== '定着済み'; });
@@ -1874,11 +1882,20 @@ function finishDungeon() {
   renderLiveHP();
   saveGame();
   checkPlayerLevel();
-  // レベルアップポップアップをキューから順に表示
+  // レベルアップポップアップをキューから順に表示（同仲間は最終レベルのみ）
   var lvQueue = (dungState.levelUps || []).slice();
   dungState.levelUps = [];
-  if (lvQueue.length > 0) {
-    setTimeout(function(){ startLevelUpQueue(lvQueue); }, 800);
+  var lvMap = {};
+  lvQueue.forEach(function(e){ lvMap[e.word] = e.level; });
+  var lvDedupe = Object.keys(lvMap).map(function(w){ return { word: w, level: lvMap[w] }; });
+  // 深海神殿クリア時は仲間会話シーンが終わってからレベルアップを表示
+  var justClearedDeepSea = dungState.dung && dungState.dung.name === '深海神殿'
+    && G.clearedDungeons.indexOf('深海神殿') >= 0
+    && lvDedupe.length > 0;
+  if (justClearedDeepSea) {
+    window._pendingLvQueue = lvDedupe;
+  } else if (lvDedupe.length > 0) {
+    setTimeout(function(){ startLevelUpQueue(lvDedupe); }, 800);
   } else {
     setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
   }
@@ -2054,11 +2071,14 @@ function finishMirrorDungeon(success) {
   renderLiveHP();
   saveGame();
   checkPlayerLevel();
-  // レベルアップポップアップをキューから順に表示
+  // レベルアップポップアップをキューから順に表示（同仲間は最終レベルのみ）
   var lvQueue = (dungState.levelUps || []).slice();
   dungState.levelUps = [];
-  if (lvQueue.length > 0) {
-    setTimeout(function(){ startLevelUpQueue(lvQueue); }, 800);
+  var lvMap2 = {};
+  lvQueue.forEach(function(e){ lvMap2[e.word] = e.level; });
+  var lvDedupe2 = Object.keys(lvMap2).map(function(w){ return { word: w, level: lvMap2[w] }; });
+  if (lvDedupe2.length > 0) {
+    setTimeout(function(){ startLevelUpQueue(lvDedupe2); }, 800);
   } else {
     setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
   }
@@ -2094,7 +2114,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材10個以上あれば錬成可能
+  // 層ごとに素材5個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -2109,7 +2129,7 @@ function renderCraftArea() {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (inv) total += (inv.qty || 1);
     });
-    if (total >= 10) craftable.push(layer);
+    if (total >= 5) craftable.push(layer);
   });
 
   var container = document.getElementById('inv-grid').parentElement;
@@ -2118,14 +2138,14 @@ function renderCraftArea() {
   div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
 
   if (!craftable.length) {
-    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が10個以上揃うと、ここで進化の石を錬成できます</div>';
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が2個以上揃うと、ここで進化の石を錬成できます</div>';
   } else {
     div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">⚗️ 進化の石を錬成する</div>'
       + craftable.map(function(layer) {
         return '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer" data-craft-layer="' + layer + '">'
           + '<span style="font-size:22px">💠</span>'
           + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + layer + 'の進化の石</div>'
-          + '<div style="font-size:10px;color:#6b5e4e">素材×10 → 進化の石×1</div></div>'
+          + '<div style="font-size:10px;color:#6b5e4e">素材×5 → 進化の石×1</div></div>'
           + '<div style="font-size:11px;color:#7b9e87">錬成する</div>'
           + '</div>';
       }).join('');
@@ -2150,14 +2170,14 @@ function craftEvoStone(layer) {
   var mats = LAYER_MAT[layer];
   var consumed = 0;
   mats.forEach(function(name) {
-    while (consumed < 10) {
+    while (consumed < 5) {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (!inv || inv.qty <= 0) break;
       inv.qty--; consumed++;
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 10) { toast('素材が足りません'); return; }
+  if (consumed < 5) { toast('素材が足りません'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
@@ -2846,21 +2866,9 @@ function checkDungeonClear(dungName) {
       if (row) row.style.display = 'block';
       G.logs.unshift({ time: now(), text: 'Laterneのお店を見つけた。チョウチンアンコウのLaterneは、にやりとした。' });
       saveGame();
-      // Laterne解放ポップアップ → 仲間会話シーンへ
+      // 仲間会話シーンを先に表示（レベルアップはシーン後に）
       setTimeout(function(){
-        showEventPopup({
-          icon: '🎣', title: 'Laterneのお店が現れた',
-          body: 'チョウチンアンコウが、深海の底でにやりとした。\n\n「珍しいものを持ってきたな。\n　うちの店に寄っていきな。」\n\n湖の向こうに、かすかな光が見えた気がした。',
-          buttonLabel: '次へ',
-          dark: true,
-          bgColor: 'rgba(5,10,26,0.92)',
-          innerBg: '#0d1a2e',
-          titleColor: '#b8d4f0',
-          bodyColor: '#6a9abf',
-          onClose: function() {
-            showDeepSeaClearScene();
-          }
-        });
+        showDeepSeaClearScene();
       }, 1000);
     } else {
       toast('新しい瓶が流れ着くようになった。（上限+3）');
@@ -3219,7 +3227,7 @@ updateCounts();
 }); // loadData終わり
 
 // ══════════════════════════════════════════════
-//  人魚の部屋（湖タップ → G.mirrorRoomUnlocked 時）
+//  人魚の部屋（専用スクリーン）
 // ══════════════════════════════════════════════
 var DRESSER_TEXTS = [
   '貝殻のブラシ。まだ髪の毛が残っている。',
@@ -3228,40 +3236,108 @@ var DRESSER_TEXTS = [
   '小さな鏡。映っているのは、今と少し違う海だ。',
   '真珠のボタンが三つ。どの服についていたのだろう。',
 ];
-var _dresserDrawerOpened = false;
+
+var MIRROR_ROOM_SPEECHES = [
+  '「素敵な場所だ！」',
+  '「ここで遊びたい……」',
+  '「なんだか、不思議な気持ちになる。」',
+  '「きらきらしてる。」',
+  '「静かで、いい。」',
+  '「ここに住みたいな。」',
+];
+
+var _mirrorRoomSpeechTimer = null;
+var _mirrorStarAnim = null;
 
 function openMirrorRoom() {
-  _dresserDrawerOpened = false;
-  var modal = document.getElementById('mirror-room-modal');
+  var screen = document.getElementById('mirror-room-screen');
+  // ナビを隠してスクリーン表示
+  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
+  screen.classList.add('active');
+
+  // ドレッサーと引き出しリセット
   var dresserEl = document.getElementById('mirror-room-dresser');
   var drawerEl  = document.getElementById('mirror-room-drawer-text');
   if (dresserEl) dresserEl.style.display = 'block';
   if (drawerEl)  { drawerEl.style.display = 'none'; drawerEl.textContent = ''; }
 
-  // 仲間スプライトを表示（最大5体、湖層優先）
+  // 宝貝を配置
+  var shellsEl = document.getElementById('mirror-room-shells');
+  if (shellsEl) {
+    shellsEl.innerHTML = ['🐚','🦪','🪸','🌟','💫'].map(function(emoji, i) {
+      return '<div style="font-size:' + (20 + Math.floor(Math.random()*10)) + 'px;opacity:' + (0.5 + Math.random()*0.5).toFixed(2)
+        + ';animation:float' + (i%3) + ' ' + (2.5+i*0.4).toFixed(1) + 's ease-in-out infinite;cursor:default">' + emoji + '</div>';
+    }).join('');
+  }
+
+  // 仲間スプライトを表示（最大6体、湖層優先）
   var spritesEl = document.getElementById('mirror-room-sprites');
+  var pool = G.companions.filter(function(c){ return c.status === '正式加入' || c.status === '仮加入'; });
+  var lake  = pool.filter(function(c){ return c.layer === '湖'; });
+  var others = pool.filter(function(c){ return c.layer !== '湖'; });
+  var shown = lake.concat(others).slice(0, 6);
+  if (!shown.length) shown = pool.slice(0, 6);
   if (spritesEl) {
-    var pool = G.companions.filter(function(c){ return c.status === '正式加入' || c.status === '仮加入'; });
-    var lake  = pool.filter(function(c){ return c.layer === '湖'; });
-    var others = pool.filter(function(c){ return c.layer !== '湖'; });
-    var shown = lake.concat(others).slice(0, 5);
-    if (!shown.length) shown = pool.slice(0, 5);
-    var ci = 0;
-    spritesEl.innerHTML = shown.map(function(c) {
-      var idx = ci++;
+    spritesEl.innerHTML = shown.map(function(c, idx) {
       var layerColor = LCOLOR[c.layer] || '#c8b89a';
-      var animDuration = (2.0 + idx * 0.35).toFixed(2);
-      return '<div title="' + c.word + '" style="display:flex;flex-direction:column;align-items:center;gap:3px">'
-        + '<div style="background:' + layerColor + ';width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
-        + 'animation:float' + (idx % 3) + ' ' + animDuration + 's ease-in-out infinite;box-shadow:0 0 8px rgba(180,100,255,0.3)">'
-        + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:28px;height:28px;image-rendering:pixelated" alt="">'
+      var dur = (2.0 + idx * 0.38).toFixed(2);
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
+        + '<div style="background:' + layerColor + ';width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
+        + 'animation:float' + (idx%3) + ' ' + dur + 's ease-in-out infinite;box-shadow:0 0 12px rgba(180,100,255,0.4)">'
+        + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:30px;height:30px;image-rendering:pixelated" alt="">'
         + '</div>'
         + '<div style="font-size:9px;color:#a080c8">' + c.word + '</div>'
         + '</div>';
     }).join('');
   }
 
-  modal.style.display = 'flex';
+  // 仲間のセリフをランダムに切り替え
+  var speechEl = document.getElementById('mirror-room-speech');
+  if (speechEl && shown.length) {
+    var pickSpeech = function() {
+      var c = shown[Math.floor(Math.random() * shown.length)];
+      var s = MIRROR_ROOM_SPEECHES[Math.floor(Math.random() * MIRROR_ROOM_SPEECHES.length)];
+      speechEl.textContent = c.word + ' — ' + s;
+    };
+    pickSpeech();
+    if (_mirrorRoomSpeechTimer) clearInterval(_mirrorRoomSpeechTimer);
+    _mirrorRoomSpeechTimer = setInterval(pickSpeech, 4000);
+  }
+
+  // 星のカーテンアニメーション
+  var canvas = document.getElementById('mirror-room-stars');
+  if (canvas) {
+    canvas.width  = canvas.offsetWidth  || 400;
+    canvas.height = canvas.offsetHeight || 700;
+    var ctx = canvas.getContext('2d');
+    var stars = [];
+    for (var i = 0; i < 120; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.8 + 0.3,
+        speed: Math.random() * 0.4 + 0.1,
+        phase: Math.random() * Math.PI * 2,
+        color: ['#e0d0ff','#c0e0ff','#ffd8f0','#fffce0'][Math.floor(Math.random()*4)],
+      });
+    }
+    var frameId;
+    var drawStars = function(t) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      stars.forEach(function(s) {
+        var alpha = 0.4 + 0.6 * Math.abs(Math.sin(t * s.speed * 0.001 + s.phase));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y + Math.sin(t * s.speed * 0.0008 + s.phase) * 6, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      frameId = requestAnimationFrame(drawStars);
+    };
+    if (_mirrorStarAnim) cancelAnimationFrame(_mirrorStarAnim);
+    _mirrorStarAnim = requestAnimationFrame(drawStars);
+  }
 }
 
 function openDresserDrawer() {
@@ -3274,10 +3350,16 @@ function openDresserDrawer() {
   if (dresserEl) dresserEl.style.display = 'none';
 }
 
-function closeMirrorRoom() {
-  var modal = document.getElementById('mirror-room-modal');
-  if (modal) modal.style.display = 'none';
+function closeMirrorRoomScreen() {
+  if (_mirrorRoomSpeechTimer) { clearInterval(_mirrorRoomSpeechTimer); _mirrorRoomSpeechTimer = null; }
+  if (_mirrorStarAnim) { cancelAnimationFrame(_mirrorStarAnim); _mirrorStarAnim = null; }
+  var screen = document.getElementById('mirror-room-screen');
+  screen.classList.remove('active');
+  showScreen('world-screen');
 }
+
+// 旧モーダル互換（呼び出し箇所があれば）
+function closeMirrorRoom() { closeMirrorRoomScreen(); }
 
 // ──────────────────────────────────────────────
 //  浜辺アニメーション（波＋きらめき）
@@ -3635,6 +3717,13 @@ function showDeepSeaClearScene() {
     icon: '🌊', title: G.playerName || 'あなた',
     body: '「応援するよ。」\n\n湖の層に、扉が現れた。',
     buttonLabel: '扉へ向かう',
+    onClose: function() {
+      // 仲間会話シーンが終わってからレベルアップを表示
+      if (window._pendingLvQueue && window._pendingLvQueue.length) {
+        startLevelUpQueue(window._pendingLvQueue);
+        window._pendingLvQueue = null;
+      }
+    }
   });
 
   setTimeout(function(){ startEventQueue(popups); }, 800);
