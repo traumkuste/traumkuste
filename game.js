@@ -2114,7 +2114,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材5個以上あれば錬成可能
+  // 層ごとに素材10個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -2129,7 +2129,7 @@ function renderCraftArea() {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (inv) total += (inv.qty || 1);
     });
-    if (total >= 5) craftable.push(layer);
+    if (total >= 10) craftable.push(layer);
   });
 
   var container = document.getElementById('inv-grid').parentElement;
@@ -2138,14 +2138,14 @@ function renderCraftArea() {
   div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
 
   if (!craftable.length) {
-    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が2個以上揃うと、ここで進化の石を錬成できます</div>';
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が10個以上揃うと、ここで進化の石を錬成できます</div>';
   } else {
     div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">⚗️ 進化の石を錬成する</div>'
       + craftable.map(function(layer) {
         return '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer" data-craft-layer="' + layer + '">'
           + '<span style="font-size:22px">💠</span>'
           + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + layer + 'の進化の石</div>'
-          + '<div style="font-size:10px;color:#6b5e4e">素材×5 → 進化の石×1</div></div>'
+          + '<div style="font-size:10px;color:#6b5e4e">素材×10 → 進化の石×1</div></div>'
           + '<div style="font-size:11px;color:#7b9e87">錬成する</div>'
           + '</div>';
       }).join('');
@@ -2170,14 +2170,14 @@ function craftEvoStone(layer) {
   var mats = LAYER_MAT[layer];
   var consumed = 0;
   mats.forEach(function(name) {
-    while (consumed < 5) {
+    while (consumed < 10) {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (!inv || inv.qty <= 0) break;
       inv.qty--; consumed++;
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 5) { toast('素材が足りません'); return; }
+  if (consumed < 10) { toast('素材が足りません'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
@@ -3238,12 +3238,12 @@ var DRESSER_TEXTS = [
 ];
 
 var MIRROR_ROOM_SPEECHES = [
-  '「素敵な場所だ！」',
-  '「ここで遊びたい……」',
-  '「なんだか、不思議な気持ちになる。」',
-  '「きらきらしてる。」',
-  '「静かで、いい。」',
-  '「ここに住みたいな。」',
+  '「！」',
+  '「……」',
+  '「おーい」',
+  '「きらきら」',
+  '「……」',
+  '「何する？」',
 ];
 
 var _mirrorRoomSpeechTimer = null;
@@ -3714,9 +3714,9 @@ function showDeepSeaClearScene() {
 
   // プレイヤー
   popups.push({
-    icon: '🌊', title: G.playerName || 'あなた',
-    body: '「応援するよ。」\n\n湖の層に、扉が現れた。',
-    buttonLabel: '扉へ向かう',
+    title: G.playerName || 'あなた',
+    body: '湖の層に、扉が現れた。',
+    buttonLabel: '応援するよ',
     onClose: function() {
       // 仲間会話シーンが終わってからレベルアップを表示
       if (window._pendingLvQueue && window._pendingLvQueue.length) {
@@ -3746,7 +3746,7 @@ function showMirrorEndingModal() {
   var alive = mirrorState.party.filter(function(c){ return c.hp > 0; });
   var speaker = alive.length ? alive[0] : (mirrorState.party[0] || null);
   var companionEl = document.getElementById('mirror-ending-companion');
-  companionEl.textContent = speaker ? '「' + speaker.word + '……引き出しを開けてみよう。」' : '';
+  companionEl.textContent = speaker ? '「' + speaker.word + '素敵な場所……ここでみんなで遊びたい。<br>……引き出しを開けてみよう。」' : '';
 
   var actionsEl = document.getElementById('mirror-ending-actions');
   actionsEl.innerHTML =
@@ -3768,9 +3768,9 @@ function showMirrorEndingModal() {
       modal.style.display = 'none';
       // 夜の森解放 & mirrorRoomUnlocked
       G.mirrorRoomUnlocked = true;
-      G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。' });
+      G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。<br>これからは、湖から人魚の部屋に、いつでも行ける。' });
       saveGame();
-      toast('湖の層に、扉が現れた。');
+      toast('庭が、森を教えてくれる。');
       // 帰還処理（ミラーダンジョン終了）
       finishMirrorDungeon(true);
     });
