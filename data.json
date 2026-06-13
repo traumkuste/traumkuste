@@ -246,7 +246,6 @@
       "dur": 25,
       "encounters": 2,
       "desc": "種から芽吹いた道。夜だけ開く、静かな森。",
-      "unlockAfter": "深海神殿",
       "mirrorRoomRequired": true
     }
   ],

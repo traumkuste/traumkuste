@@ -1136,12 +1136,19 @@ function renderDungeon() {
   var el = document.getElementById('dlist');
   el.innerHTML = DUNGEONS.map(function(d) {
     // 解放条件チェック
-    var isLocked = d.unlockAfter && G.clearedDungeons.indexOf(d.unlockAfter) < 0;
-    if (!isLocked && d.mirrorRoomRequired && !G.mirrorRoomUnlocked) isLocked = true;
+    var isLocked = false;
+    var lockReason = '';
+    if (d.mirrorRoomRequired && !G.mirrorRoomUnlocked) {
+      isLocked = true;
+      lockReason = '水鏡の路 50階をクリアすると解放される';
+    } else if (d.unlockAfter && G.clearedDungeons.indexOf(d.unlockAfter) < 0) {
+      isLocked = true;
+      lockReason = d.unlockAfter + 'をクリアすると解放される';
+    }
     if (isLocked) {
       return '<div class="dcard" style="opacity:0.45;pointer-events:none">'
         + '<div class="dcard-name">🔒 ???</div>'
-        + '<div class="dcard-desc">' + d.unlockAfter + 'をクリアすると解放される</div>'
+        + '<div class="dcard-desc">' + lockReason + '</div>'
         + '</div>';
     }
     var timeStr = d.type === 'floor'
@@ -1451,20 +1458,6 @@ function triggerBattle(isBoss) {
   if (isBoss) {
     addLL('danger', '地鳴りがする。深淵の底から、何かが這い上がってきた。');
     setTimeout(function(){ addLL('danger', '── 深淵の王 ──'); }, 400);
-    // ボス遭遇ポップアップ
-    setTimeout(function(){
-      if (!dungState.active) return;
-      showEventPopup({
-        icon: '👁️', title: '深淵の王',
-        body: '地の底から、這い上がってくる。\n暗闇が、かたちを持ちはじめた。\n\n目が、開いた。',
-        buttonLabel: '立ち向かう',
-        dark: true,
-        bgColor: 'rgba(20,5,5,0.94)',
-        innerBg: '#1a0808',
-        titleColor: '#f08080',
-        bodyColor: '#c06060',
-      });
-    }, 600);
   } else {
     addLL('battle', enemy + 'が現れた！');
   }
@@ -1601,14 +1594,23 @@ function triggerBattle(isBoss) {
           addLL('battle', '棘が合計' + refTotal + 'のダメージを返した。（敵残HP: ' + enemyHP + '）');
         }
       } else {
-        // 単体攻撃（SPD低い仲間を優先。leise装備は狙われにくい）
-        var candidates = fighters.slice().sort(function(a,b){ return a.stats.spd - b.stats.spd; });
-        var target = candidates[candidates.length - 1];
-        for (var ti = 0; ti < candidates.length; ti++) {
-          var qfx = equipFx(candidates[ti]);
-          if (ti < candidates.length - 1 && qfx.quiet && Math.random() < qfx.quiet) continue;
-          target = candidates[ti];
-          break;
+        // 単体攻撃：SPDが低いほど狙われやすい重み付きランダム
+        // weight = max(1, maxSPD - SPD + 4) で最低SPDでも最高SPDの数倍程度に収まる
+        var maxSpd = fighters.reduce(function(m,c){ return Math.max(m, c.stats.spd||0); }, 0);
+        var pool = fighters.map(function(c) {
+          var qfx = equipFx(c);
+          var base = Math.max(1, maxSpd - (c.stats.spd||0) + 4);
+          // leise装備は重みを大幅に下げる（狙われにくい）
+          var w = qfx.quiet ? Math.max(1, Math.floor(base * (1 - qfx.quiet))) : base;
+          return { c: c, w: w };
+        });
+        var totalW = pool.reduce(function(s,p){ return s+p.w; }, 0);
+        var roll = Math.random() * totalW;
+        var acc = 0;
+        var target = pool[pool.length-1].c;
+        for (var pi = 0; pi < pool.length; pi++) {
+          acc += pool[pi].w;
+          if (roll < acc) { target = pool[pi].c; break; }
         }
         var tfx = equipFx(target);
         var defMod = target.status === '仮加入' ? 0.9 : 1.0;
@@ -2092,7 +2094,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材10個以上あれば錬成可能
+  // 層ごとに素材5個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -2107,7 +2109,7 @@ function renderCraftArea() {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (inv) total += (inv.qty || 1);
     });
-    if (total >= 10) craftable.push(layer);
+    if (total >= 5) craftable.push(layer);
   });
 
   var container = document.getElementById('inv-grid').parentElement;
@@ -2116,14 +2118,14 @@ function renderCraftArea() {
   div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
 
   if (!craftable.length) {
-    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が10個以上揃うと、ここで進化の石を錬成できます</div>';
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が2個以上揃うと、ここで進化の石を錬成できます</div>';
   } else {
     div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">⚗️ 進化の石を錬成する</div>'
       + craftable.map(function(layer) {
         return '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer" data-craft-layer="' + layer + '">'
           + '<span style="font-size:22px">💠</span>'
           + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + layer + 'の進化の石</div>'
-          + '<div style="font-size:10px;color:#6b5e4e">素材×10 → 進化の石×1</div></div>'
+          + '<div style="font-size:10px;color:#6b5e4e">素材×5 → 進化の石×1</div></div>'
           + '<div style="font-size:11px;color:#7b9e87">錬成する</div>'
           + '</div>';
       }).join('');
@@ -2148,14 +2150,14 @@ function craftEvoStone(layer) {
   var mats = LAYER_MAT[layer];
   var consumed = 0;
   mats.forEach(function(name) {
-    while (consumed < 10) {
+    while (consumed < 5) {
       var inv = G.inventory.find(function(i){ return i.name === name; });
       if (!inv || inv.qty <= 0) break;
       inv.qty--; consumed++;
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 10) { toast('素材が足りません'); return; }
+  if (consumed < 5) { toast('素材が足りません'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
@@ -2173,7 +2175,7 @@ function useItem(item) {
   if (item.type === '装備(仲間)') { openCompPicker(item, 'equip'); return; }
   if (item.type === 'スキル魂') { openCompPicker(item, 'skill'); return; }
   if (item.type === '進化の石') { openEvoStep1(item); return; }
-  if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×10）'); return; }
+  if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×2）'); return; }
   if (item.type === '謎のアイテム') {
     if (G.laterneUnlocked) toast(item.name + ' — Laterneのお店で売れるかもしれない');
     else toast(item.name + ' — 価値がありそうだが、使い道がわからない');
