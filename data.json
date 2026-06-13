@@ -238,6 +238,16 @@
       "desc": "水面が鏡のように静まり返る。階段は果てなく続いている。",
       "unlockAfter": "深海神殿",
       "checkpointEvery": 5
+    },
+    {
+      "id": 5,
+      "name": "夜の森",
+      "layer": "庭",
+      "dur": 25,
+      "encounters": 2,
+      "desc": "種から芽吹いた道。夜だけ開く、静かな森。",
+      "unlockAfter": "深海神殿",
+      "mirrorRoomRequired": true
     }
   ],
   "enemies": {

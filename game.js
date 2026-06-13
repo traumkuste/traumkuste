@@ -47,6 +47,7 @@ var G = {
   levelMsgSeen: {},  // 表示済みレベルメッセージ
   omiyageDate: '',  // 最後におみやげを受け取った日付
   deepestFloor: 0,  // 水鏡の路の最深記録
+  mirrorRoomUnlocked: false,  // 人魚の部屋解放フラグ
 };
 // ── UTILS ──
 function toast(msg) {
@@ -640,20 +641,34 @@ function checkOmiyage() {
 }
 
 function showOmiyageNotice(sender) {
+  // まずトースト通知（既存UI）
   var el = document.getElementById('omiyage-notice');
-  if (!el) return;
-  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
-    + avatarHTML(sender, 32)
-    + '<div style="flex:1">'
-    + '<div style="font-size:13px;color:#2c2416;font-weight:600">' + sender.word + 'がおみやげを持ってきた</div>'
-    + '<div style="font-size:11px;color:#6b5e4e;font-style:italic">荷物を確認しよう</div>'
-    + '</div>'
+  if (el) {
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
+      + avatarHTML(sender, 32)
+      + '<div style="flex:1">'
+      + '<div style="font-size:13px;color:#2c2416;font-weight:600">' + sender.word + 'がおみやげを持ってきた</div>'
+      + '<div style="font-size:11px;color:#6b5e4e;font-style:italic">荷物を確認しよう</div>'
+      + '</div>'
+      + '</div>';
+    el.style.display = 'block';
+    el.onclick = function() {
+      el.style.display = 'none';
+      showScreen('inventory-screen');
+    };
+  }
+  // 演出ポップアップ
+  var layerColor = LCOLOR[sender.layer] || '#c8b89a';
+  var avatarInline = '<div style="display:inline-flex;align-items:center;justify-content:center;background:' + layerColor + ';width:52px;height:52px;border-radius:50%;margin:0 auto 10px;box-shadow:0 0 0 3px #fff">'
+    + '<img src="' + spriteURL(sender.word, sender.article, sender.layer, sender.level) + '" style="width:38px;height:38px;image-rendering:pixelated" alt="">'
     + '</div>';
-  el.style.display = 'block';
-  el.onclick = function() {
-    el.style.display = 'none';
-    showScreen('inventory-screen');
-  };
+  showEventPopup({
+    icon: '',
+    title: sender.word + 'がおみやげを持ってきた',
+    body: avatarInline + '\n「持ってきたよ。」\n荷物の中に入れておいたから、確認してね。',
+    buttonLabel: '荷物を開ける',
+    onClose: function() { showScreen('inventory-screen'); }
+  });
 }
 
 // おみやげを開封
@@ -1122,6 +1137,7 @@ function renderDungeon() {
   el.innerHTML = DUNGEONS.map(function(d) {
     // 解放条件チェック
     var isLocked = d.unlockAfter && G.clearedDungeons.indexOf(d.unlockAfter) < 0;
+    if (!isLocked && d.mirrorRoomRequired && !G.mirrorRoomUnlocked) isLocked = true;
     if (isLocked) {
       return '<div class="dcard" style="opacity:0.45;pointer-events:none">'
         + '<div class="dcard-name">🔒 ???</div>'
@@ -1435,6 +1451,20 @@ function triggerBattle(isBoss) {
   if (isBoss) {
     addLL('danger', '地鳴りがする。深淵の底から、何かが這い上がってきた。');
     setTimeout(function(){ addLL('danger', '── 深淵の王 ──'); }, 400);
+    // ボス遭遇ポップアップ
+    setTimeout(function(){
+      if (!dungState.active) return;
+      showEventPopup({
+        icon: '👁️', title: '深淵の王',
+        body: '地の底から、這い上がってくる。\n暗闇が、かたちを持ちはじめた。\n\n目が、開いた。',
+        buttonLabel: '立ち向かう',
+        dark: true,
+        bgColor: 'rgba(20,5,5,0.94)',
+        innerBg: '#1a0808',
+        titleColor: '#f08080',
+        bodyColor: '#c06060',
+      });
+    }, 600);
   } else {
     addLL('battle', enemy + 'が現れた！');
   }
@@ -1551,17 +1581,21 @@ function triggerBattle(isBoss) {
         // 全体攻撃
         addLL('danger', enemy + 'の全体攻撃！');
         var refTotal = 0;
+        var aoeLog = [];
         fighters.forEach(function(c) {
           var afx = equipFx(c);
-          if (afx.dodge && Math.random() < afx.dodge) return;
+          if (afx.dodge && Math.random() < afx.dodge) {
+            aoeLog.push(c.word + 'はかわした');
+            return;
+          }
           var defMod = c.status === '仮加入' ? 0.9 : 1.0;
           if (c.layer === dungLayer) defMod *= 1.1;
           var dmg = Math.max(1, Math.floor(enemyAtk * 0.6) - Math.floor(c.stats.def * defMod * 0.4) + Math.floor(Math.random()*6));
           c.hp = Math.max(0, c.hp - dmg);
           if (afx.reflect && dmg > 0) refTotal += Math.max(1, Math.floor(dmg * afx.reflect));
+          aoeLog.push(c.hp <= 0 ? c.word + ' -' + dmg + '（倒れた）' : c.word + ' -' + dmg + '（残' + c.hp + '）');
         });
-        var dmgLog = fighters.map(function(c){ return c.word + ' -' + (c.hp <= 0 ? '(倒れた)' : c.hp + '残'); }).join('、');
-        addLL('danger', dmgLog);
+        addLL('danger', aoeLog.join('、'));
         if (refTotal > 0) {
           enemyHP = Math.max(0, enemyHP - refTotal);
           addLL('battle', '棘が合計' + refTotal + 'のダメージを返した。（敵残HP: ' + enemyHP + '）');
@@ -1911,6 +1945,11 @@ function onFloorBattleClear() {
   if (!mirrorState.active || mirrorState.failed) return;
   var floor = mirrorState.floor;
   if (floor > (G.deepestFloor || 0)) G.deepestFloor = floor;
+  // 50階ゴール（チェックポイントより先に評価）
+  if (floor === 50) {
+    setTimeout(showMirrorEndingModal, 700);
+    return;
+  }
   if (floor % mirrorState.checkpointEvery === 0) {
     setTimeout(showMirrorCheckpoint, 700);
   } else {
@@ -2766,21 +2805,63 @@ function checkDungeonClear(dungName) {
     G.clearedDungeons.push(dungName);
     // ダンジョンクリアごとに瓶上限+3
     G.bottleLimit = (G.bottleLimit || 3) + 3;
-    toast('新しい瓶が流れ着くようになった。（上限+3）');
+
+    // エリア解放ポップアップ
+    var dung = DUNGEONS.find(function(d){ return d.name === dungName; });
+    var layerColor = (dung && LCOLOR[dung.layer]) ? LCOLOR[dung.layer] : null;
+    var hexToRgba = function(hex, a) {
+      if (!hex || hex.length < 7) return 'rgba(0,0,0,' + a + ')';
+      var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+    };
+
     if (dungName === '霧の入り江') {
       var survived = dungState.party.filter(function(c){ return c.hp > 0; });
       var hero = survived.length ? survived[0].word : dungState.party[0].word;
       G.logs.unshift({ time: now(), text: 'はじめての冒険を終えて、' + hero + 'は嬉しそうだ。浜辺の方から瓶の鳴る音が聞こえた。' });
-    }
-    if (dungName === '深海神殿') {
+      setTimeout(function(){
+        showEventPopup({
+          icon: '🐚', title: '霧の入り江を踏破した',
+          body: hero + 'は波打ち際に立ち、振り返った。\n新しい瓶が、浜辺へ流れ着くようになった。',
+          buttonLabel: '家へ帰る',
+        });
+      }, 1000);
+    } else if (dungName === '珊瑚の迷宮') {
+      var surv2 = dungState.party.filter(function(c){ return c.hp > 0; });
+      var hero2 = surv2.length ? surv2[0].word : dungState.party[0].word;
+      setTimeout(function(){
+        showEventPopup({
+          icon: '🪸', title: '珊瑚の迷宮を踏破した',
+          body: '光の届かない深さから、帰ってきた。\n新しい瓶が流れ着くようになった。',
+          buttonLabel: '帰還する',
+          bgColor: hexToRgba('#508CA4', 0.85),
+          innerBg: '#e8f4fc',
+        });
+      }, 1000);
+    } else if (dungName === '深海神殿') {
       G.laterneUnlocked = true;
       var row = document.getElementById('laterne-row');
       if (row) row.style.display = 'block';
       G.logs.unshift({ time: now(), text: 'Laterneのお店を見つけた。チョウチンアンコウのLaterneは、にやりとした。' });
-      setTimeout(function(){
-        toast('深海の底に、小さな灯りが見えた。');
-      }, 1000);
       saveGame();
+      // Laterne解放ポップアップ → 仲間会話シーンへ
+      setTimeout(function(){
+        showEventPopup({
+          icon: '🎣', title: 'Laterneのお店が現れた',
+          body: 'チョウチンアンコウが、深海の底でにやりとした。\n\n「珍しいものを持ってきたな。\n　うちの店に寄っていきな。」\n\n湖の向こうに、かすかな光が見えた気がした。',
+          buttonLabel: '次へ',
+          dark: true,
+          bgColor: 'rgba(5,10,26,0.92)',
+          innerBg: '#0d1a2e',
+          titleColor: '#b8d4f0',
+          bodyColor: '#6a9abf',
+          onClose: function() {
+            showDeepSeaClearScene();
+          }
+        });
+      }, 1000);
+    } else {
+      toast('新しい瓶が流れ着くようになった。（上限+3）');
     }
   }
 }
@@ -2813,6 +2894,7 @@ function saveGame() {
       omiyageDate: G.omiyageDate || '',
       levelMsgSeen: G.levelMsgSeen || {},
       deepestFloor: G.deepestFloor || 0,
+      mirrorRoomUnlocked: G.mirrorRoomUnlocked || false,
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -2851,6 +2933,7 @@ function loadGame() {
     G.omiyageDate = data.omiyageDate || '';
     G.levelMsgSeen = data.levelMsgSeen || {};
     G.deepestFloor = data.deepestFloor || 0;
+    G.mirrorRoomUnlocked = data.mirrorRoomUnlocked || false;
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
@@ -2954,10 +3037,14 @@ function bindAll() {
 });
 
   // layer rows
-
   ['空中都市','湖','庭','浜辺','海','深海'].forEach(function(l) {
     var el = document.getElementById('layer-' + l);
     if (el) el.addEventListener('click', function() {
+      // 湖は人魚の部屋フラグが立っていれば専用モーダルへ
+      if (l === '湖' && G.mirrorRoomUnlocked) {
+        openMirrorRoom();
+        return;
+      }
       var ws = G.words.filter(function(w){ return w.layer === l; });
       if (!ws.length) { toast(l + 'にはまだ言葉がない'); return; }
       toast(l + ': ' + ws.slice(0,3).map(function(w){ return w.word; }).join('・') + (ws.length > 3 ? '...' : ''));
@@ -3128,6 +3215,67 @@ updateCounts();
     }
   });
 }); // loadData終わり
+
+// ══════════════════════════════════════════════
+//  人魚の部屋（湖タップ → G.mirrorRoomUnlocked 時）
+// ══════════════════════════════════════════════
+var DRESSER_TEXTS = [
+  '貝殻のブラシ。まだ髪の毛が残っている。',
+  '読めない文字で書かれたメモ。海の言葉かもしれない。',
+  'なぜか陸の花が、乾かずに咲いている。',
+  '小さな鏡。映っているのは、今と少し違う海だ。',
+  '真珠のボタンが三つ。どの服についていたのだろう。',
+];
+var _dresserDrawerOpened = false;
+
+function openMirrorRoom() {
+  _dresserDrawerOpened = false;
+  var modal = document.getElementById('mirror-room-modal');
+  var dresserEl = document.getElementById('mirror-room-dresser');
+  var drawerEl  = document.getElementById('mirror-room-drawer-text');
+  if (dresserEl) dresserEl.style.display = 'block';
+  if (drawerEl)  { drawerEl.style.display = 'none'; drawerEl.textContent = ''; }
+
+  // 仲間スプライトを表示（最大5体、湖層優先）
+  var spritesEl = document.getElementById('mirror-room-sprites');
+  if (spritesEl) {
+    var pool = G.companions.filter(function(c){ return c.status === '正式加入' || c.status === '仮加入'; });
+    var lake  = pool.filter(function(c){ return c.layer === '湖'; });
+    var others = pool.filter(function(c){ return c.layer !== '湖'; });
+    var shown = lake.concat(others).slice(0, 5);
+    if (!shown.length) shown = pool.slice(0, 5);
+    var ci = 0;
+    spritesEl.innerHTML = shown.map(function(c) {
+      var idx = ci++;
+      var layerColor = LCOLOR[c.layer] || '#c8b89a';
+      var animDuration = (2.0 + idx * 0.35).toFixed(2);
+      return '<div title="' + c.word + '" style="display:flex;flex-direction:column;align-items:center;gap:3px">'
+        + '<div style="background:' + layerColor + ';width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
+        + 'animation:float' + (idx % 3) + ' ' + animDuration + 's ease-in-out infinite;box-shadow:0 0 8px rgba(180,100,255,0.3)">'
+        + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:28px;height:28px;image-rendering:pixelated" alt="">'
+        + '</div>'
+        + '<div style="font-size:9px;color:#a080c8">' + c.word + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  modal.style.display = 'flex';
+}
+
+function openDresserDrawer() {
+  var dresserEl = document.getElementById('mirror-room-dresser');
+  var drawerEl  = document.getElementById('mirror-room-drawer-text');
+  if (!drawerEl) return;
+  var text = DRESSER_TEXTS[Math.floor(Math.random() * DRESSER_TEXTS.length)];
+  drawerEl.textContent = '「' + text + '」';
+  drawerEl.style.display = 'block';
+  if (dresserEl) dresserEl.style.display = 'none';
+}
+
+function closeMirrorRoom() {
+  var modal = document.getElementById('mirror-room-modal');
+  if (modal) modal.style.display = 'none';
+}
 
 // ──────────────────────────────────────────────
 //  浜辺アニメーション（波＋きらめき）
@@ -3345,4 +3493,195 @@ function closeLevelUpPopup() {
   popup.style.display = 'none';
   // 次のポップアップへ（少し間を置く）
   setTimeout(showNextLevelUpPopup, 300);
+}
+
+// ══════════════════════════════════════════════
+//  汎用演出ポップアップ（showEventPopup）
+// ══════════════════════════════════════════════
+var _eventQueue = [];
+
+// config = { icon, title, body, buttonLabel, onClose, bgColor, textColor }
+function showEventPopup(config) {
+  var popup = document.getElementById('event-popup');
+  var bg    = document.getElementById('event-popup-bg');
+  var inner = document.getElementById('event-popup-inner');
+  document.getElementById('event-popup-icon').textContent  = config.icon  || '';
+  document.getElementById('event-popup-title').textContent = config.title || '';
+  document.getElementById('event-popup-body').innerHTML    = (config.body  || '').replace(/\n/g, '<br>');
+  var btn = document.getElementById('event-popup-btn');
+  btn.textContent = config.buttonLabel || '閉じる';
+
+  // 背景色・テキスト色カスタマイズ
+  if (config.bgColor) {
+    bg.style.background = config.bgColor;
+    inner.style.background = config.innerBg || '#f5f0e8';
+  } else {
+    bg.style.background = 'rgba(0,0,0,0.65)';
+    inner.style.background = '#f5f0e8';
+  }
+  if (config.dark) {
+    inner.style.background = config.innerBg || '#0d1a2e';
+    document.getElementById('event-popup-title').style.color = config.titleColor || '#b8d4f0';
+    document.getElementById('event-popup-body').style.color  = config.bodyColor  || '#6a9abf';
+    btn.style.background = '#2d6a8f';
+    btn.style.color = '#e8f4fc';
+  } else {
+    document.getElementById('event-popup-title').style.color = '#2c2416';
+    document.getElementById('event-popup-body').style.color  = '#4a3c2e';
+    btn.style.background = '#2c2416';
+    btn.style.color = '#f5f0e8';
+  }
+
+  popup.style.display = 'flex';
+
+  // ボタンを付け替え（都度addEventListenerしないようにcloneで）
+  var newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', function() {
+    popup.style.display = 'none';
+    if (typeof config.onClose === 'function') config.onClose();
+    // キューに続きがあれば次を表示
+    if (_eventQueue.length) {
+      var next = _eventQueue.shift();
+      setTimeout(function(){ showEventPopup(next); }, 300);
+    }
+  });
+}
+
+// キューに積んで順番に表示
+function queueEventPopup(config) {
+  _eventQueue.push(config);
+}
+
+// キューを開始（最初の1個を表示）
+function startEventQueue(configs) {
+  if (!configs || !configs.length) return;
+  _eventQueue = configs.slice(1);
+  showEventPopup(configs[0]);
+}
+
+// ══════════════════════════════════════════════
+//  深海クリア → 水鏡の路開放 仲間会話シーン
+// ══════════════════════════════════════════════
+function showDeepSeaClearScene() {
+  var comps = G.companions.filter(function(c){ return c.status === '正式加入' || c.status === '仮加入'; });
+  if (!comps.length) {
+    // 仲間がいなければ単純トーストで終わり
+    setTimeout(function(){ toast('湖の層に、扉が現れた。'); }, 600);
+    return;
+  }
+
+  var used = [];
+
+  // 1体目：湖層の仲間（いなければ全体からランダム）
+  var lakeComps = comps.filter(function(c){ return c.layer === '湖'; });
+  var c1 = lakeComps.length ? rand(lakeComps) : rand(comps);
+  used.push(c1.word);
+
+  // 2体目：高レベルの仲間（1体目と別）
+  var c2candidates = comps.filter(function(c){ return used.indexOf(c.word) < 0; })
+    .sort(function(a,b){ return b.level - a.level; });
+  var c2 = c2candidates.length ? c2candidates[0] : null;
+  if (c2) used.push(c2.word);
+
+  // 3体目：浅い層・低レベル（1・2体目と別）
+  var shallowLayers = ['空中都市','庭','浜辺'];
+  var c3candidates = comps.filter(function(c){ return used.indexOf(c.word) < 0 && shallowLayers.indexOf(c.layer) >= 0; });
+  if (!c3candidates.length) c3candidates = comps.filter(function(c){ return used.indexOf(c.word) < 0; });
+  c3candidates.sort(function(a,b){ return a.level - b.level; });
+  var c3 = c3candidates.length ? c3candidates[0] : null;
+
+  // ポップアップを順番に組み立て
+  var popups = [];
+
+  function makeAvatar(c, sz) {
+    sz = sz || 48;
+    var layerColor = LCOLOR[c.layer] || '#c8b89a';
+    return '<div style="display:inline-flex;align-items:center;justify-content:center;background:' + layerColor + ';width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;margin:0 auto 8px;box-shadow:0 0 0 3px #fff">'
+      + '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:' + Math.round(sz*0.72) + 'px;height:' + Math.round(sz*0.72) + 'px;image-rendering:pixelated" alt="">'
+      + '</div>';
+  }
+
+  // 1体目セリフ
+  popups.push({
+    icon: '', title: c1.word,
+    body: makeAvatar(c1) + '「' + c1.word + '……この路は、迷路だと思う、知ってるよ。\n迷うかもしれない。でも探してる宝物がある。」',
+    buttonLabel: '…',
+    bodyColor: '#4a3c2e', titleColor: '#2c2416',
+  });
+
+  // 2体目セリフ
+  if (c2) {
+    popups.push({
+      icon: '', title: c2.word,
+      body: makeAvatar(c2) + '「行こう。' + c1.word + 'がそう言っている。」',
+      buttonLabel: '…',
+    });
+  }
+
+  // 3体目セリフ
+  if (c3) {
+    popups.push({
+      icon: '', title: c3.word,
+      body: makeAvatar(c3) + '「こわい？　でも……行く。' + c3.word + 'だから、行く。」',
+      buttonLabel: '…',
+    });
+  }
+
+  // プレイヤー
+  popups.push({
+    icon: '🌊', title: G.playerName || 'あなた',
+    body: '「応援するよ。」\n\n湖の層に、扉が現れた。',
+    buttonLabel: '扉へ向かう',
+  });
+
+  setTimeout(function(){ startEventQueue(popups); }, 800);
+}
+
+// ══════════════════════════════════════════════
+//  水鏡の路 50階エンディング
+// ══════════════════════════════════════════════
+function showMirrorEndingModal() {
+  mirrorState.paused = true;
+  var modal = document.getElementById('mirror-ending-modal');
+
+  document.getElementById('mirror-ending-title').textContent = '50階──人魚のドレッサーがある部屋';
+  document.getElementById('mirror-ending-body').innerHTML =
+    '水鏡の路は、ここで終わっていた。<br><br>'
+    + '薄明かりの中に、白いドレッサーが置いてある。<br>'
+    + '貝殻と海草で飾られた、誰かのものだった部屋。';
+
+  // 仲間のセリフ
+  var alive = mirrorState.party.filter(function(c){ return c.hp > 0; });
+  var speaker = alive.length ? alive[0] : (mirrorState.party[0] || null);
+  var companionEl = document.getElementById('mirror-ending-companion');
+  companionEl.textContent = speaker ? '「' + speaker.word + '……引き出しを開けてみよう。」' : '';
+
+  var actionsEl = document.getElementById('mirror-ending-actions');
+  actionsEl.innerHTML =
+    '<button id="btn-mirror-drawer" style="background:#162840;border:1px solid #4a7aaa;border-radius:14px;padding:14px 16px;color:#b8d4f0;font-size:14px;cursor:pointer;font-family:Georgia,serif;letter-spacing:1px">引き出しを開ける</button>';
+
+  modal.style.display = 'flex';
+
+  document.getElementById('btn-mirror-drawer').addEventListener('click', function() {
+    // ステップ2：引き出しの中身
+    document.getElementById('mirror-ending-body').innerHTML =
+      'なぜか、陸の花が乾かずに咲いている。<br>'
+      + '種の入った小さな袋もある。<br><br>'
+      + '貝殻のブラシには、まだ髪の毛が残っていた。';
+    companionEl.textContent = speaker ? '「' + speaker.word + '……庭に植えてみよう。」' : '「庭に植えてみよう。」';
+    actionsEl.innerHTML =
+      '<button id="btn-mirror-plant" style="background:#0a2a14;border:1px solid #2a7a3a;border-radius:14px;padding:14px 16px;color:#80e0a0;font-size:14px;cursor:pointer;font-family:Georgia,serif;letter-spacing:1px">種を植える</button>';
+
+    document.getElementById('btn-mirror-plant').addEventListener('click', function() {
+      modal.style.display = 'none';
+      // 夜の森解放 & mirrorRoomUnlocked
+      G.mirrorRoomUnlocked = true;
+      G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。' });
+      saveGame();
+      toast('湖の層に、扉が現れた。');
+      // 帰還処理（ミラーダンジョン終了）
+      finishMirrorDungeon(true);
+    });
+  });
 }
