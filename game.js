@@ -816,6 +816,8 @@ function initQuiz() {
   var pending = G.words.filter(function(w){
     if (w.status === '定着済み') return false;
     if (G.quizDoneToday[w.word]) return false;
+    // 手紙による逆クイズは時間ゲートを免除
+    if (w.isReverse) return true;
     // 時間ゲートチェック：まだ答えられない問題は除外
     if (w.correctCount === 1 && w.lastCorrectAt && (now_ms - w.lastCorrectAt < HALF_DAY)) return false;
     if (w.correctCount === 2 && w.firstCorrectAt && (now_ms - w.firstCorrectAt < FULL_DAY)) return false;
@@ -831,6 +833,8 @@ function initQuiz() {
     showScreen('home-screen');
     return;
   }
+  // 手紙でセットされた逆クイズが既にキューにあれば先頭を保持
+  var existingReverse = (G.quizQ || []).filter(function(w){ return w.isReverse; });
   // 最近拾った言葉（bottleRecentに入っているもの）を先頭に
   var recent = G.bottleRecent || [];
   pending.sort(function(a, b) {
@@ -840,7 +844,7 @@ function initQuiz() {
     if (bi >= 0 && ai < 0) return 1;
     return Math.random() - 0.5;
   });
-  G.quizQ = pending;
+  G.quizQ = existingReverse.concat(pending);
   loadNextQuiz();
 }
 
@@ -3440,12 +3444,12 @@ var DRESSER_TEXTS = [
 ];
 
 var MIRROR_ROOM_SPEECHES = [
-  '「！」',
-  '「……」',
-  '「おーい」',
-  '「きらきら。」',
+  '「素敵な場所だ！」',
+  '「ここで遊びたい……」',
+  '「なんだか、不思議な気持ちになる。」',
+  '「きらきらしてる。」',
   '「静かで、いい。」',
-  '「。」',
+  '「ここに住みたいな。」',
 ];
 
 var _mirrorRoomSpeechTimer = null;
