@@ -46,8 +46,10 @@ var G = {
   seenAdjectives: [],
   levelMsgSeen: {},  // 表示済みレベルメッセージ
   omiyageDate: '',  // 最後におみやげを受け取った日付
-  deepestFloor: 0,  // 水鏡の路の最深記録
-  mirrorRoomUnlocked: false,  // 人魚の部屋解放フラグ
+  deepestFloor: 0,
+  mirrorRoomUnlocked: false,
+  stormFrames: [],
+  stormCleared: {},
 };
 // ── UTILS ──
 function toast(msg) {
@@ -1175,19 +1177,53 @@ function renderDungeon() {
       renderDungeon();
     });
   });
+  // 嵐カード（深海神殿クリア後に解放）
+  var stormArea = document.getElementById('storm-card-area');
+  if (!stormArea) {
+    stormArea = document.createElement('div');
+    stormArea.id = 'storm-card-area';
+    el.parentNode.insertBefore(stormArea, el.nextSibling);
+  }
+  if (G.clearedDungeons.indexOf('深海神殿') >= 0) {
+    renderStormCard();
+  } else {
+    stormArea.innerHTML = '';
+  }
   updateSendBtn();
 }
 
 function renderPartySlots() {
   var el = document.getElementById('pslots');
   el.innerHTML = '';
+  var isStorm = G.selDungeon && G.selDungeon.isStorm;
+  var stormLayer = isStorm ? G.selDungeon.stormLayer : null;
+
+  // 嵐選択中は警告帯を表示
+  var warnEl = document.getElementById('storm-party-warn');
+  if (!warnEl) {
+    warnEl = document.createElement('div');
+    warnEl.id = 'storm-party-warn';
+    el.parentNode.insertBefore(warnEl, el);
+  }
+  if (isStorm) {
+    var fc = STORM_FRAME_COLORS[stormLayer];
+    warnEl.innerHTML = '<div style="background:rgba(180,100,20,0.15);border:1px solid ' + fc.border + ';border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:' + fc.border + ';line-height:1.6">'
+      + fc.icon + ' <strong>' + stormLayer + '層の嵐</strong> — ' + stormLayer + '層以外の仲間はATK/DEF -70%'
+      + '</div>';
+  } else {
+    warnEl.innerHTML = '';
+  }
+
   for (var i = 0; i < 3; i++) {
     var slot = document.createElement('div');
     var c = G.party[i];
+    var debuffed = isStorm && c && c.layer !== stormLayer;
     slot.className = 'pslot' + (c ? ' filled' : '');
+    if (debuffed) slot.style.cssText += 'border-color:#c06020;background:#2a1a08;';
     if (c) {
-      slot.innerHTML = '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:26px;height:26px;image-rendering:pixelated" alt="">'
-        + '<span class="sname">' + c.word + '</span>'
+      slot.innerHTML = '<img src="' + spriteURL(c.word, c.article, c.layer, c.level) + '" style="width:26px;height:26px;image-rendering:pixelated' + (debuffed ? ';filter:grayscale(0.6) sepia(0.4)' : '') + '" alt="">'
+        + '<span class="sname" style="' + (debuffed ? 'color:#c08060' : '') + '">' + c.word + '</span>'
+        + (debuffed ? '<span style="position:absolute;top:2px;left:4px;font-size:10px">⚠️</span>' : '')
         + '<span class="sremove" data-i="' + i + '">×</span>';
       slot.querySelector('.sremove').addEventListener('click', function(e) {
         e.stopPropagation();
@@ -1196,7 +1232,6 @@ function renderPartySlots() {
         renderPartySlots();
         updateSendBtn();
       });
-      // タップで入れ替え
       (function(idx){ slot.addEventListener('click', function(e){
         if (e.target.classList.contains('sremove')) return;
         openPartyPicker(idx);
@@ -1323,6 +1358,15 @@ function sendParty() {
   var dung = G.selDungeon;
   if (!party.length || !dung) return;
   party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = true; });
+
+  // 嵐ダンジョンの場合：非対応層に-70%補正
+  if (dung.isStorm) {
+    applyStormDebuff(party, dung.stormLayer);
+    var debuffed = party.filter(function(c){ return c._stormDebuff; });
+    if (debuffed.length) {
+      toast('⚠️ ' + debuffed.map(function(c){ return c.word; }).join('・') + ' はATK/DEF-70%');
+    }
+  }
 
   // フロアダンジョン（水鏡の路など）は専用ルートへ
   if (dung.type === 'floor') {
@@ -1551,8 +1595,14 @@ function triggerBattle(isBoss) {
         var xpGain = 20 + Math.floor(Math.random() * 15);
         fighters.forEach(function(c) {
           var xfx = equipFx(c);
-          c.xp += Math.round(xpGain * (1 + (xfx.xp || 0)));
-          if (c.xp >= c.level * XP_PER_LEVEL) {
+          // レベル上限：進化済みは110、通常は100
+          var levelCap = c.ancestry && c.ancestry.length ? 110 : 100;
+          if (c.level >= levelCap) return; // 上限に達していたらXP付与しない
+          // 100超はXP効率激減（通常の1/5）
+          var xpMulti = c.level >= 100 ? 0.2 : 1.0;
+          c.xp += Math.round(xpGain * (1 + (xfx.xp || 0)) * xpMulti);
+          var xpRequired = c.level * XP_PER_LEVEL * (c.level >= 100 ? 5 : 1);
+          if (c.xp >= xpRequired) {
             c.level++;
             c.stats.atk += 2; c.stats.def += 2; c.stats.spd += 1; c.stats.lck += 1;
             c.maxHP += 6; c.hp = Math.min(c.hp + 6, c.maxHP);
@@ -1874,8 +1924,10 @@ function finishDungeon() {
     }
     G.logs.unshift({ time: now(), text: survivedNames + 'が' + dungState.dung.name + 'から帰還した。' });
     checkDungeonClear(dungState.dung.name);
+    checkStormClear();
   }
   dungState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
+  removeStormDebuff(dungState.party);
   dungState.active = false;
   G.lastBattleLog = dungState.battleLog.slice(); // 最新戦闘ログを保存
   if (typeof dungFx !== 'undefined') dungFx.stop();
@@ -2114,7 +2166,7 @@ function renderCraftArea() {
   var existing = document.getElementById('craft-area');
   if (existing) existing.remove();
 
-  // 層ごとに素材10個以上あれば錬成可能
+  // 層ごとに素材5個以上あれば錬成可能
   var LAYER_MAT = {
     '浜辺': ['砂浜の瓶','流木の欠片'],
     '海':   ['珊瑚片','光魚の鱗'],
@@ -2138,7 +2190,7 @@ function renderCraftArea() {
   div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
 
   if (!craftable.length) {
-    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が10個以上揃うと、ここで進化の石を錬成できます</div>';
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">素材が2個以上揃うと、ここで進化の石を錬成できます</div>';
   } else {
     div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">⚗️ 進化の石を錬成する</div>'
       + craftable.map(function(layer) {
@@ -2177,7 +2229,7 @@ function craftEvoStone(layer) {
       if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
     }
   });
-  if (consumed < 10) { toast('素材が足りません'); return; }
+  if (consumed < 10) { toast('素材が足りません（10個必要）'); return; }
   var stoneName = layer + 'の進化の石';
   var existing = G.inventory.find(function(i){ return i.name === stoneName; });
   if (existing) existing.qty++;
@@ -2195,7 +2247,7 @@ function useItem(item) {
   if (item.type === '装備(仲間)') { openCompPicker(item, 'equip'); return; }
   if (item.type === 'スキル魂') { openCompPicker(item, 'skill'); return; }
   if (item.type === '進化の石') { openEvoStep1(item); return; }
-  if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×2）'); return; }
+  if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×10）'); return; }
   if (item.type === '謎のアイテム') {
     if (G.laterneUnlocked) toast(item.name + ' — Laterneのお店で売れるかもしれない');
     else toast(item.name + ' — 価値がありそうだが、使い道がわからない');
@@ -2879,6 +2931,152 @@ function checkDungeonClear(dungName) {
 // ── 謎アイテムのuseItem処理 ──
 // useItemに謎アイテムの処理を追加（既存のuseItemを拡張）
 
+// ══════════════════════════════════════════════
+//  季節の嵐システム
+// ══════════════════════════════════════════════
+
+// 週番号（ISO）を返す
+function getISOWeek(date) {
+  var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  var day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  var week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week: week };
+}
+
+// 今週のキー（例: "2025W22"）
+function getStormWeekKey() {
+  var w = getISOWeek(new Date());
+  return w.year + 'W' + String(w.week).padStart(2, '0');
+}
+
+// 週番号から属性層を決定（6層を順番に巡回）
+var STORM_LAYERS = ['浜辺', '海', '深海', '湖', '庭', '空中都市'];
+var STORM_LAYER_EMOJI = { '浜辺':'🏖️', '海':'🌊', '深海':'🌑', '湖':'🪞', '庭':'🌿', '空中都市':'☁️' };
+var STORM_FRAME_COLORS = {
+  '浜辺':  { border: '#c8a050', glow: 'rgba(200,160,80,0.5)',  label: '砂金の嵐',  icon: '🌪️' },
+  '海':    { border: '#2a7aaa', glow: 'rgba(42,122,170,0.5)', label: '海嵐',      icon: '🌊' },
+  '深海':  { border: '#4a2aaa', glow: 'rgba(74,42,170,0.5)',  label: '深淵嵐',    icon: '🌑' },
+  '湖':    { border: '#8a60c0', glow: 'rgba(138,96,192,0.5)', label: '水鏡嵐',    icon: '🪞' },
+  '庭':    { border: '#4a8a40', glow: 'rgba(74,138,64,0.5)',  label: '緑嵐',      icon: '🌿' },
+  '空中都市': { border: '#808080', glow: 'rgba(120,120,120,0.5)', label: '天空嵐', icon: '☁️' },
+};
+
+function getCurrentStormLayer() {
+  var w = getISOWeek(new Date());
+  return STORM_LAYERS[(w.week - 1) % STORM_LAYERS.length];
+}
+
+// 嵐ダンジョン定義（動的）
+function getStormDungeon() {
+  var layer = getCurrentStormLayer();
+  var weekKey = getStormWeekKey();
+  var fc = STORM_FRAME_COLORS[layer];
+  return {
+    id: 99,
+    name: '季節の嵐 — ' + fc.label,
+    layer: layer,
+    dur: 60,
+    encounters: 3,
+    desc: STORM_LAYER_EMOJI[layer] + ' 今週は' + layer + '層の嵐。対応層の仲間を連れよう。',
+    isStorm: true,
+    weekKey: weekKey,
+    stormLayer: layer,
+  };
+}
+
+// 嵐ダンジョンカードをダンジョン一覧に追加表示
+function renderStormCard() {
+  var el = document.getElementById('storm-card-area');
+  if (!el) return;
+  var dung = getStormDungeon();
+  var fc = STORM_FRAME_COLORS[dung.stormLayer];
+  var cleared = G.stormCleared && G.stormCleared[dung.weekKey];
+  var isSelected = G.selDungeon && G.selDungeon.id === 99;
+
+  el.innerHTML = '<div style="font-size:10px;letter-spacing:2px;color:#7a9ab8;margin:16px 0 8px">季 節 の 嵐</div>'
+    + '<div id="storm-dcard" style="'
+    + 'background:' + (isSelected ? '#1e3d60' : '#1a3050') + ';'
+    + 'border:2px solid ' + fc.border + ';'
+    + 'border-radius:10px;padding:13px 14px;cursor:pointer;'
+    + 'box-shadow:0 0 12px ' + fc.glow + ';'
+    + 'position:relative;'
+    + (cleared ? 'opacity:0.6;' : '') + '">'
+    + '<div style="font-size:14px;color:#e8d4b0;font-weight:600">' + fc.icon + ' ' + dung.name + '</div>'
+    + '<div style="font-size:11px;color:#8aaccc;margin-top:3px">' + dung.desc + '</div>'
+    + '<div style="font-size:10px;color:#5a8ab0;margin-top:4px">所要時間 約60秒 • 敵3体 • 週1回</div>'
+    + (cleared
+      ? '<div style="position:absolute;top:8px;right:10px;font-size:11px;color:' + fc.border + '">✓ 今週クリア済み</div>'
+      : '<div style="position:absolute;top:8px;right:10px;font-size:10px;color:' + fc.border + '">フレーム獲得チャンス</div>')
+    + '</div>';
+
+  var card = document.getElementById('storm-dcard');
+  if (card) {
+    card.addEventListener('click', function() {
+      G.selDungeon = getStormDungeon();
+      renderDungeon();
+      renderStormCard();
+    });
+  }
+}
+
+// 嵐クリア処理
+function checkStormClear() {
+  var dung = dungState.dung;
+  if (!dung || !dung.isStorm) return;
+  var weekKey = dung.weekKey;
+  if (G.stormCleared && G.stormCleared[weekKey]) return; // 既にクリア済み
+  G.stormCleared = G.stormCleared || {};
+  G.stormCleared[weekKey] = true;
+
+  // フレーム付与
+  var layer = dung.stormLayer;
+  var frameId = 'storm_' + layer + '_' + weekKey;
+  if (!G.stormFrames) G.stormFrames = [];
+  if (G.stormFrames.indexOf(frameId) < 0) {
+    G.stormFrames.push(frameId);
+  }
+  var fc = STORM_FRAME_COLORS[layer];
+  saveGame();
+
+  // フレーム獲得演出
+  setTimeout(function() {
+    showEventPopup({
+      icon: fc.icon,
+      title: fc.label + 'を越えた',
+      body: '嵐の中を生き延びた記念として、\n特別なフレームを手に入れた。\n\n「' + fc.label + 'のフレーム」\n仲間一覧から確認できる。',
+      buttonLabel: '受け取る',
+    });
+  }, 1200);
+}
+
+// 嵐時の弱体補正を仲間に付与
+function applyStormDebuff(party, stormLayer) {
+  party.forEach(function(c) {
+    if (c.layer !== stormLayer) {
+      c._stormDebuff = true;
+      c._origAtk = c.stats.atk;
+      c._origDef = c.stats.def;
+      c.stats.atk = Math.max(1, Math.floor(c.stats.atk * 0.3));
+      c.stats.def = Math.max(1, Math.floor(c.stats.def * 0.3));
+    }
+  });
+}
+
+// 帰還時に嵐補正を戻す
+function removeStormDebuff(party) {
+  party.forEach(function(c) {
+    if (c._stormDebuff) {
+      c.stats.atk = c._origAtk;
+      c.stats.def = c._origDef;
+      delete c._stormDebuff;
+      delete c._origAtk;
+      delete c._origDef;
+    }
+  });
+}
+
 // ── SAVE / LOAD ──
 var SAVE_KEY = 'traumkuste_save';
 
@@ -2905,6 +3103,8 @@ function saveGame() {
       levelMsgSeen: G.levelMsgSeen || {},
       deepestFloor: G.deepestFloor || 0,
       mirrorRoomUnlocked: G.mirrorRoomUnlocked || false,
+      stormFrames: G.stormFrames || [],
+      stormCleared: G.stormCleared || {},
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -2944,6 +3144,8 @@ function loadGame() {
     G.levelMsgSeen = data.levelMsgSeen || {};
     G.deepestFloor = data.deepestFloor || 0;
     G.mirrorRoomUnlocked = data.mirrorRoomUnlocked || false;
+    G.stormFrames = data.stormFrames || [];
+    G.stormCleared = data.stormCleared || {};
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
@@ -3238,12 +3440,12 @@ var DRESSER_TEXTS = [
 ];
 
 var MIRROR_ROOM_SPEECHES = [
-  '「！」',
-  '「……」',
-  '「おーい」',
-  '「きらきら」',
-  '「……」',
-  '「何する？」',
+  '「素敵な場所だ！」',
+  '「ここで遊びたい……」',
+  '「なんだか、不思議な気持ちになる。」',
+  '「きらきらしてる。」',
+  '「静かで、いい。」',
+  '「ここに住みたいな。」',
 ];
 
 var _mirrorRoomSpeechTimer = null;
@@ -3714,9 +3916,9 @@ function showDeepSeaClearScene() {
 
   // プレイヤー
   popups.push({
-    title: G.playerName || 'あなた',
-    body: '湖の層に、扉が現れた。',
-    buttonLabel: '応援するよ',
+    icon: '🌊', title: G.playerName || 'あなた',
+    body: '「応援するよ。」\n\n湖の層に、扉が現れた。',
+    buttonLabel: '扉へ向かう',
     onClose: function() {
       // 仲間会話シーンが終わってからレベルアップを表示
       if (window._pendingLvQueue && window._pendingLvQueue.length) {
@@ -3746,7 +3948,7 @@ function showMirrorEndingModal() {
   var alive = mirrorState.party.filter(function(c){ return c.hp > 0; });
   var speaker = alive.length ? alive[0] : (mirrorState.party[0] || null);
   var companionEl = document.getElementById('mirror-ending-companion');
-  companionEl.textContent = speaker ? '「' + speaker.word + '素敵な場所……ここでみんなで遊びたい。<br>……引き出しを開けてみよう。」' : '';
+  companionEl.textContent = speaker ? '「' + speaker.word + '……引き出しを開けてみよう。」' : '';
 
   var actionsEl = document.getElementById('mirror-ending-actions');
   actionsEl.innerHTML =
@@ -3768,9 +3970,9 @@ function showMirrorEndingModal() {
       modal.style.display = 'none';
       // 夜の森解放 & mirrorRoomUnlocked
       G.mirrorRoomUnlocked = true;
-      G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。<br>これからは、湖から人魚の部屋に、いつでも行ける。' });
+      G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。' });
       saveGame();
-      toast('庭が、森を教えてくれる。');
+      toast('湖の層に、扉が現れた。');
       // 帰還処理（ミラーダンジョン終了）
       finishMirrorDungeon(true);
     });
