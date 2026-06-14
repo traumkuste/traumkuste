@@ -1479,8 +1479,13 @@ function triggerBattle(isBoss) {
   if (!alive.length) { dungState.failed = true; return; }
   dungState.inBattle = true;
 
-  var enemy = isBoss ? '深淵の王' : rand(ENEMIES[dungState.dung.layer]);
   var dungLayer = dungState.dung ? dungState.dung.layer : '浜辺';
+  var enemyTable = ENEMIES[dungLayer];
+  if (!enemyTable || !enemyTable.length) {
+    // data.jsonに敵テーブルがない層（嵐で来る可能性あり）はフォールバック
+    enemyTable = ENEMIES['浜辺'] || ['迷える影', '霧の番人', '夜の使者'];
+  }
+  var enemy = isBoss ? '深淵の王' : rand(enemyTable);
   var enemyAtk, enemyDef, enemyHP;
   var isDeepSea = dungLayer === '深海';
   // ── フロアモード（水鏡の路）の敵ステータス ──
@@ -1492,13 +1497,25 @@ function triggerBattle(isBoss) {
     enemyDef = Math.floor(4 + f * 1.3) + Math.floor(Math.random() * 4);
     enemyHP  = Math.floor(70 + f * 22) + Math.floor(Math.random() * Math.max(20, f * 8));
   } else if (dungLayer === '浜辺') {
-    enemyAtk = 7 + Math.floor(Math.random() * 8);
+    enemyAtk = 7  + Math.floor(Math.random() * 8);
     enemyDef = 5  + Math.floor(Math.random() * 5);
-    enemyHP  = 60 + Math.floor(Math.random() * 50);  // 変更なし
+    enemyHP  = 60 + Math.floor(Math.random() * 50);
   } else if (dungLayer === '海') {
-    enemyAtk = 16 + Math.floor(Math.random() * 12);  // +3 (~20%強化)
-    enemyDef = 10 + Math.floor(Math.random() * 8);   // +2 (~20%強化)
-    enemyHP  = 180 + Math.floor(Math.random() * 85); // +30 (~20%強化)
+    enemyAtk = 16 + Math.floor(Math.random() * 12);
+    enemyDef = 10 + Math.floor(Math.random() * 8);
+    enemyHP  = 180 + Math.floor(Math.random() * 85);
+  } else if (dungLayer === '湖') {
+    enemyAtk = 18 + Math.floor(Math.random() * 12);
+    enemyDef = 12 + Math.floor(Math.random() * 8);
+    enemyHP  = 200 + Math.floor(Math.random() * 90);
+  } else if (dungLayer === '庭') {
+    enemyAtk = 12 + Math.floor(Math.random() * 10);
+    enemyDef = 8  + Math.floor(Math.random() * 6);
+    enemyHP  = 120 + Math.floor(Math.random() * 70);
+  } else if (dungLayer === '空中都市') {
+    enemyAtk = 22 + Math.floor(Math.random() * 14);
+    enemyDef = 15 + Math.floor(Math.random() * 10);
+    enemyHP  = 250 + Math.floor(Math.random() * 100);
   } else if (!isBoss) {
     enemyAtk = 21 + Math.floor(Math.random() * 16);  // +3 (~17%強化)
     enemyDef = 14 + Math.floor(Math.random() * 12);  // +2 (~17%強化)
