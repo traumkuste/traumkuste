@@ -3834,63 +3834,66 @@ function renderRoomResident(roomIdx) {
   if (resident) {
     var affection = room.affection || 0;
     var wish = room.wish || null;
-    var wishText = wish ? '「' + wish + ' がほしいな……」' : companionSpeech(resident);
-    var hearts = '';
-    for (var h = 0; h < Math.min(10, Math.floor(affection / 10)); h++) hearts += '♥';
-    for (var e = Math.min(10, Math.floor(affection / 10)); e < 10; e++) hearts += '♡';
+
+    // ハート表示（好感度0のときは非表示）
+    var affectionBlock = '';
+    if (affection > 0) {
+      var hearts = '';
+      for (var h = 0; h < Math.min(10, Math.floor(affection / 10)); h++) hearts += '♥';
+      for (var e = Math.min(10, Math.floor(affection / 10)); e < 10; e++) hearts += '♡';
+      affectionBlock =
+        '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+        + '<span style="font-size:10px;color:#9a8a7a;letter-spacing:1px">Zuneigung</span>'
+        + '<span style="font-size:11px;color:#c07080">' + hearts + '　' + affection + '</span>'
+        + '</div>'
+        + '<div style="height:4px;background:#e0d8c8;border-radius:2px">'
+        + '<div style="height:100%;background:#e08098;border-radius:2px;width:' + Math.min(100, affection) + '%"></div>'
+        + '</div>'
+        + '</div>';
+    }
 
     el.innerHTML =
-      // 仲間カード（タップでwishセリフ）
       '<div id="room-resident-card" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #c8b89a;border-radius:12px;padding:12px 14px;cursor:pointer;margin-bottom:10px">'
       + '<div style="width:36px;height:36px;border-radius:50%;background:' + (LCOLOR[resident.layer]||'#c8b89a') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
       + '<img src="' + spriteURL(resident.word, resident.article, resident.layer, resident.level) + '" style="width:24px;height:24px;image-rendering:pixelated"></div>'
       + '<div style="flex:1">'
       + '<div style="font-size:13px;color:#2c2416;font-weight:600">' + resident.word + '</div>'
-      + '<div id="room-speech-text" style="font-size:11px;color:#6b5e4e;font-style:italic;margin-top:2px">' + wishText + '</div>'
+      + '<div id="room-speech-text" style="font-size:11px;color:#6b5e4e;font-style:italic;margin-top:2px">' + companionSpeech(resident) + '</div>'
       + '</div>'
       + '<div style="font-size:11px;color:#9a8a7a;flex-shrink:0">変更</div>'
       + '</div>'
-      // 好感度バー
-      + '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
-      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-      + '<span style="font-size:10px;color:#9a8a7a;letter-spacing:1px">好感度</span>'
-      + '<span style="font-size:11px;color:#c07080">' + hearts + ' ' + affection + '</span>'
-      + '</div>'
-      + '<div style="height:4px;background:#e0d8c8;border-radius:2px">'
-      + '<div style="height:100%;background:#e08098;border-radius:2px;width:' + Math.min(100, affection) + '%"></div>'
-      + '</div>'
-      + '</div>'
-      // プレゼントボタン
-      + '<button id="room-gift-btn" style="width:100%;background:#f5ede0;border:1px solid #c8b89a;border-radius:12px;padding:11px;font-size:13px;color:#6b5e4e;cursor:pointer;font-family:Georgia,serif;margin-bottom:8px">🎁 プレゼントする</button>'
-      // 飾ってあるもの
+      + affectionBlock
+      + '<button id="room-gift-btn" style="width:100%;background:#f5ede0;border:1px solid #c8b89a;border-radius:12px;padding:11px;font-size:13px;color:#6b5e4e;cursor:pointer;font-family:Georgia,serif;margin-bottom:8px">オブジェをプレゼントする</button>'
       + (room.items && room.items.length ? '<div style="font-size:11px;color:#9a8a7a;padding:0 2px">'
         + '飾ってあるもの：' + room.items.map(function(it){ return it.icon + it.name; }).join('　') + '</div>' : '')
-      // 住人変更（小さく下に）
       + '<div id="room-change-btn" style="text-align:right;padding:4px 2px;font-size:11px;color:#b0a090;cursor:pointer">住人を変更する</div>';
 
-    // 仲間カードタップ → wishセリフトグル
+    // タップで通常セリフ ↔ wishセリフを交互に切り替え
     var card = document.getElementById('room-resident-card');
     var speechEl = document.getElementById('room-speech-text');
+    var _showingWish = false;
     if (card) card.addEventListener('click', function(e) {
       if (e.target.closest('#room-change-btn')) return;
-      // wishを割り当て（まだなければランダムに選ぶ）
-      if (!room.wish) {
-        var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
-        if (BLUEPRINTS.length) {
-          room.wish = BLUEPRINTS[Math.floor(Math.random() * BLUEPRINTS.length)].name;
-          saveGame();
+      _showingWish = !_showingWish;
+      if (_showingWish) {
+        // wishがなければ今ここで割り当て
+        if (!room.wish) {
+          var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
+          if (BLUEPRINTS.length) {
+            room.wish = BLUEPRINTS[Math.floor(Math.random() * BLUEPRINTS.length)].name;
+            saveGame();
+          }
         }
+        speechEl.textContent = room.wish ? '「' + room.wish + ' がほしいな……」' : companionSpeech(resident);
+      } else {
+        speechEl.textContent = companionSpeech(resident);
       }
-      if (speechEl) speechEl.textContent = room.wish
-        ? '「' + room.wish + ' がほしいな……」'
-        : companionSpeech(resident);
     });
 
-    // プレゼントボタン
     var giftBtn = document.getElementById('room-gift-btn');
     if (giftBtn) giftBtn.addEventListener('click', function(){ openGiftPicker(roomIdx); });
 
-    // 住人変更
     var chgBtn = document.getElementById('room-change-btn');
     if (chgBtn) chgBtn.addEventListener('click', function(){ openResidentPicker(roomIdx); });
 
