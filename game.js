@@ -453,8 +453,9 @@ function showScreen(id) {
     showScreen('livelog-screen');
     return;
   }
+  if (id === 'world-screen') checkOmiyage();
   if (id === 'apartment-screen') renderApartmentList();
-  if (id === 'room-screen' && _currentRoomIdx !== null) renderRoomResident(_currentRoomIdx);
+  if (id === 'room-screen' && _currentRoomIdx !== null) { renderRoomCanvas(_currentRoomIdx); renderRoomResident(_currentRoomIdx); }
   if (id === 'companions-screen') renderCompanions();
   if (id === 'sofa-screen') { renderSofa(); initDataManagement(); }
   if (id === 'bookshelf-screen') renderBookshelf();
@@ -3494,11 +3495,7 @@ var _mirrorRoomSpeechTimer = null;
 var _mirrorStarAnim = null;
 
 function openMirrorRoom() {
-  var screen = document.getElementById('mirror-room-screen');
-  // ナビを隠してスクリーン表示
-  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
-  screen.classList.add('active');
-
+  showScreen('mirror-room-screen');
   // ドレッサーと引き出しリセット
   var dresserEl = document.getElementById('mirror-room-dresser');
   var drawerEl  = document.getElementById('mirror-room-drawer-text');
@@ -3597,8 +3594,6 @@ function openDresserDrawer() {
 function closeMirrorRoomScreen() {
   if (_mirrorRoomSpeechTimer) { clearInterval(_mirrorRoomSpeechTimer); _mirrorRoomSpeechTimer = null; }
   if (_mirrorStarAnim) { cancelAnimationFrame(_mirrorStarAnim); _mirrorStarAnim = null; }
-  var screen = document.getElementById('mirror-room-screen');
-  screen.classList.remove('active');
   showScreen('world-screen');
 }
 
@@ -3618,10 +3613,7 @@ function updateApartmentBtn() {
 }
 
 function openApartmentList() {
-  var screen = document.getElementById('apartment-screen');
-  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
-  screen.classList.add('active');
-  renderApartmentList();
+  showScreen('apartment-screen');
 }
 
 function renderApartmentList() {
@@ -3701,10 +3693,8 @@ var _currentRoomIdx = null;
 
 function openRoomScreen(roomIdx) {
   _currentRoomIdx = roomIdx;
-  var screen = document.getElementById('room-screen');
-  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
-  screen.classList.add('active');
   document.getElementById('room-screen-title').textContent = '部屋 ' + (roomIdx + 1);
+  showScreen('room-screen');
   renderRoomCanvas(roomIdx);
   renderRoomResident(roomIdx);
 }
@@ -3915,12 +3905,10 @@ function renderRoomCanvas(roomIdx) {
 
 function closeRoomScreen() {
   if (_roomAnimId) { cancelAnimationFrame(_roomAnimId); _roomAnimId = null; }
-  openApartmentList();
+  showScreen('apartment-screen');
 }
 
 function closeApartmentList() {
-  var screen = document.getElementById('apartment-screen');
-  screen.classList.remove('active');
   showScreen('world-screen');
 }
 // ──────────────────────────────────────────────
