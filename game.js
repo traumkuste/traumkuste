@@ -446,13 +446,12 @@ function equipFx(c) {
 }
 
 function showScreen(id) {
+  if (typeof dungState !== 'undefined' && dungState.active && id !== 'livelog-screen') {
+    id = 'livelog-screen';
+  }
   var screens = document.querySelectorAll('.screen');
   for (var i = 0; i < screens.length; i++) screens[i].classList.remove('active');
   document.getElementById(id).classList.add('active');
-    if (dungState.active) {
-    showScreen('livelog-screen');
-    return;
-  }
   if (id === 'world-screen') checkOmiyage();
   if (id === 'apartment-screen') renderApartmentList();
   if (id === 'room-screen' && _currentRoomIdx !== null) { renderRoomCanvas(_currentRoomIdx); renderRoomResident(_currentRoomIdx); }
