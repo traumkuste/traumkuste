@@ -288,10 +288,17 @@
         "w": 20
       },
       {
-        "name": "光る貝殻",
-        "type": "謎のアイテム",
+        "name": "Sandkorn（砂粒）",
+        "type": "素材",
+        "icon": "⏳",
+        "desc": "砂浜で集めた砂粒。オブジェ作りの素材になる",
+        "w": 18
+      },
+      {
+        "name": "Muschelstück（貝殻片）",
+        "type": "素材",
         "icon": "🐚",
-        "desc": "価値がありそうだが、使い道がわからない",
+        "desc": "砕けた貝殻の欠片。オブジェ作りの素材になる",
         "w": 15
       },
       {
@@ -350,11 +357,25 @@
         "w": 20
       },
       {
-        "name": "古い羅針盤",
-        "type": "謎のアイテム",
-        "icon": "🧭",
-        "desc": "価値がありそうだが、使い道がわからない",
+        "name": "Seetang（海藻）",
+        "type": "素材",
+        "icon": "🌿",
+        "desc": "海中に揺れる海藻。オブジェ作りの素材になる",
+        "w": 18
+      },
+      {
+        "name": "Treibholz（流木）",
+        "type": "素材",
+        "icon": "🪵",
+        "desc": "波に運ばれた流木。オブジェ作りの素材になる",
         "w": 15
+      },
+      {
+        "name": "Meeresstein（海の石）",
+        "type": "素材",
+        "icon": "🪨",
+        "desc": "海底で磨かれた石。オブジェ作りの素材になる",
+        "w": 12
       },
       {
         "name": "小さな羽根",
@@ -436,6 +457,20 @@
         "w": 20
       },
       {
+        "name": "Meerestonerde（深海粘土）",
+        "type": "素材",
+        "icon": "🫙",
+        "desc": "深海の底にある粘土。オブジェ作りの素材になる",
+        "w": 18
+      },
+      {
+        "name": "Tintenstein（墨石）",
+        "type": "素材",
+        "icon": "🖤",
+        "desc": "深海生物の墨が染み込んだ石。オブジェ作りの素材になる",
+        "w": 12
+      },
+      {
         "name": "アーマー",
         "type": "装備(仲間)",
         "icon": "🛡️",
@@ -443,13 +478,6 @@
         "stat": {
           "def": 4
         },
-        "w": 15
-      },
-      {
-        "name": "星図",
-        "type": "謎のアイテム",
-        "icon": "🗺️",
-        "desc": "価値がありそうだが、使い道がわからない",
         "w": 15
       },
       {
@@ -512,6 +540,62 @@
         "icon": "✨",
         "desc": "形容詞の力を宿した装備",
         "w": 14
+      },
+      {
+        "name": "Sandburg（砂のお城）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Sandburg（砂のお城）",
+        "desc": "砂のお城の作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Koralle（珊瑚の置物）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Koralle（珊瑚の置物）",
+        "desc": "珊瑚の置物の作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Netz（小さな網）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Netz（小さな網）",
+        "desc": "小さな網の作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Tintenfisch（タコの置物）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Tintenfisch（タコの置物）",
+        "desc": "タコの置物の作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Kissen（手作りのクッション）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Kissen（手作りのクッション）",
+        "desc": "手作りのクッションの作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Kaktustopf（サボテンの鉢）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Kaktustopf（サボテンの鉢）",
+        "desc": "サボテンの鉢の作り方が書いてある",
+        "w": 4
+      },
+      {
+        "name": "Regenwurm（陶器の芋虫）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Regenwurm（陶器の芋虫）",
+        "desc": "陶器の芋虫の作り方が書いてある",
+        "w": 4
       }
     ],
     "湖": [
@@ -548,7 +632,10 @@
         "type": "装備(仲間)",
         "icon": "🪞",
         "desc": "仲間に装備 DEF+3 LCK+2",
-        "stat": { "def": 3, "lck": 2 },
+        "stat": {
+          "def": 3,
+          "lck": 2
+        },
         "w": 12
       },
       {
@@ -565,6 +652,99 @@
         "icon": "✨",
         "desc": "形容詞の力を宿した装備",
         "w": 10
+      },
+      {
+        "name": "Sandburg（砂のお城）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Sandburg（砂のお城）",
+        "desc": "砂のお城の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Koralle（珊瑚の置物）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Koralle（珊瑚の置物）",
+        "desc": "珊瑚の置物の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Netz（小さな網）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Netz（小さな網）",
+        "desc": "小さな網の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Tintenfisch（タコの置物）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Tintenfisch（タコの置物）",
+        "desc": "タコの置物の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Kissen（手作りのクッション）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Kissen（手作りのクッション）",
+        "desc": "手作りのクッションの作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Kaktustopf（サボテンの鉢）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Kaktustopf（サボテンの鉢）",
+        "desc": "サボテンの鉢の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      },
+      {
+        "name": "Regenwurm（陶器の芋虫）の設計図",
+        "type": "設計図",
+        "icon": "📜",
+        "blueprintFor": "Regenwurm（陶器の芋虫）",
+        "desc": "陶器の芋虫の作り方が書いてある",
+        "w": 4,
+        "minFloor": 20
+      }
+    ],
+    "庭": [
+      {
+        "name": "Erde（土塊）",
+        "type": "素材",
+        "icon": "🟫",
+        "desc": "庭の柔らかな土。オブジェ作りの素材になる",
+        "w": 18
+      },
+      {
+        "name": "Dorn（トゲ片）",
+        "type": "素材",
+        "icon": "🌵",
+        "desc": "植物のトゲの欠片。オブジェ作りの素材になる",
+        "w": 15
+      },
+      {
+        "name": "Rote Erde（赤土）",
+        "type": "素材",
+        "icon": "🔴",
+        "desc": "赤みがかった土。オブジェ作りの素材になる",
+        "w": 12
+      },
+      {
+        "name": "Baumwolle（綿毛）",
+        "type": "素材",
+        "icon": "☁️",
+        "desc": "植物の綿毛。柔らかくふわふわしている",
+        "w": 15
       }
     ]
   },
@@ -816,5 +996,127 @@
       "最も"
     ],
     "_comment": "tier判定はgame.js側。basesとadjectivesはここで自由に追加・編集できます"
-  }
+  },
+  "blueprints": [
+    {
+      "name": "Sandburg（砂のお城）",
+      "icon": "🏖️",
+      "desc": "砂浜の素材でできた小さなお城の模型",
+      "layer": "浜辺",
+      "recipe": [
+        {
+          "name": "Sandkorn（砂粒）",
+          "qty": 3
+        },
+        {
+          "name": "Muschelstück（貝殻片）",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "name": "Koralle（珊瑚の置物）",
+      "icon": "🪸",
+      "desc": "海から拾った珊瑚で作った置物",
+      "layer": "海",
+      "recipe": [
+        {
+          "name": "珊瑚片",
+          "qty": 3
+        },
+        {
+          "name": "Meeresstein（海の石）",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "name": "Netz（小さな網）",
+      "icon": "🕸️",
+      "desc": "海藻と流木で編んだ小さな網",
+      "layer": "海",
+      "recipe": [
+        {
+          "name": "Seetang（海藻）",
+          "qty": 2
+        },
+        {
+          "name": "Treibholz（流木）",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "name": "Tintenfisch（タコの置物）",
+      "icon": "🐙",
+      "desc": "深海粘土で作った愛らしいタコ",
+      "layer": "深海",
+      "recipe": [
+        {
+          "name": "Meerestonerde（深海粘土）",
+          "qty": 3
+        },
+        {
+          "name": "Tintenstein（墨石）",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "name": "Kissen（手作りのクッション）",
+      "icon": "🛋️",
+      "desc": "綿毛と砂と流木の木枠で作ったクッション",
+      "layer": "浜辺",
+      "recipe": [
+        {
+          "name": "Baumwolle（綿毛）",
+          "qty": 3
+        },
+        {
+          "name": "Treibholz（流木）",
+          "qty": 1
+        },
+        {
+          "name": "Sandkorn（砂粒）",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "name": "Kaktustopf（サボテンの鉢）",
+      "icon": "🌵",
+      "desc": "砂と土とトゲで作ったサボテンの鉢植え",
+      "layer": "庭",
+      "recipe": [
+        {
+          "name": "Erde（土塊）",
+          "qty": 2
+        },
+        {
+          "name": "Sandkorn（砂粒）",
+          "qty": 2
+        },
+        {
+          "name": "Dorn（トゲ片）",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "name": "Regenwurm（陶器の芋虫）",
+      "icon": "🐛",
+      "desc": "赤土と珊瑚片で焼いた愛嬌のある芋虫",
+      "layer": "庭",
+      "recipe": [
+        {
+          "name": "Rote Erde（赤土）",
+          "qty": 3
+        },
+        {
+          "name": "珊瑚片",
+          "qty": 1
+        }
+      ]
+    }
+  ]
 }

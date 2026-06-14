@@ -2088,16 +2088,25 @@ function triggerFloorItem() {
   var pool = DROPS['湖'];
   if (!pool || !pool.length) return;
   var floor = mirrorState.floor;
+  // 20階未満は設計図（minFloor:20）を除外
+  var filteredPool = pool.filter(function(item) {
+    return !item.minFloor || floor >= item.minFloor;
+  });
+  if (!filteredPool.length) filteredPool = pool;
   var alive = mirrorState.party.filter(function(c){ return c.hp > 0; });
   var lckFinder = alive.slice().sort(function(a,b){ return (b.stats.lck||0)-(a.stats.lck||0); })[0] || mirrorState.party[0];
   var finder = alive[0] || mirrorState.party[0];
-  var item = Object.assign({}, weightedRand(pool));
+  var item = Object.assign({}, weightedRand(filteredPool));
   if (item.type === '生成装備') {
     var gDepth = Math.min(2, Math.floor(floor / 5));
     item = genEquip(gDepth, lckFinder ? (lckFinder.stats.lck || 0) : 0);
     if (item.rare || item.tier === 2) addLL('success', '✨ ただならぬ気配を放つ装備だ。');
   }
-  addLL('item', finder.word + 'が ' + item.icon + '「' + item.name + '」を見つけた。');
+  if (item.type === '設計図') {
+    addLL('success', finder.word + 'が 📜「' + item.name + '」を見つけた！');
+  } else {
+    addLL('item', finder.word + 'が ' + item.icon + '「' + item.name + '」を見つけた。');
+  }
   var existing = G.inventory.find(function(i){ return i.name === item.name; });
   if (existing) existing.qty = (existing.qty || 1) + 1;
   else { item.qty = 1; G.inventory.push(item); }
@@ -2234,6 +2243,112 @@ function renderCraftArea() {
       craftEvoStone(this.getAttribute('data-craft-layer'));
     });
   });
+
+  // 設計図クラフトセクション
+  renderBlueprintCraftArea(container);
+}
+
+function renderBlueprintCraftArea(container) {
+  var existing = document.getElementById('blueprint-craft-area');
+  if (existing) existing.remove();
+
+  var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
+  if (!BLUEPRINTS.length) return;
+
+  // 設計図を持っているものだけ表示
+  var available = BLUEPRINTS.filter(function(bp) {
+    var bpItem = G.inventory.find(function(i){ return i.name === bp.name + 'の設計図'; });
+    return bpItem && (bpItem.qty || 1) > 0;
+  });
+
+  var div = document.createElement('div');
+  div.id = 'blueprint-craft-area';
+  div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #c8b89a';
+
+  if (!available.length) {
+    // 設計図を一枚でも持っていればヘッダーだけ出す
+    var anyBp = G.inventory.find(function(i){ return i.type === '設計図'; });
+    if (!anyBp) return; // 設計図自体ない → 表示しない
+    div.innerHTML = '<div style="font-size:11px;color:#9a8a7a;font-style:italic;text-align:center">設計図の素材を集めると、ここでオブジェを作れます</div>';
+    container.appendChild(div);
+    return;
+  }
+
+  div.innerHTML = '<div style="font-size:12px;color:#6b5e4e;letter-spacing:1px;margin-bottom:10px">📜 オブジェを作る</div>'
+    + available.map(function(bp) {
+      // 素材の充足チェック
+      var canCraft = bp.recipe.every(function(r) {
+        var inv = G.inventory.find(function(i){ return i.name === r.name; });
+        return inv && (inv.qty || 1) >= r.qty;
+      });
+      var recipeText = bp.recipe.map(function(r) {
+        var inv = G.inventory.find(function(i){ return i.name === r.name; });
+        var have = inv ? (inv.qty || 1) : 0;
+        var ok = have >= r.qty;
+        return '<span style="color:' + (ok ? '#4a8a5a' : '#c05040') + '">'
+          + r.name + '×' + r.qty + '（' + have + '個）</span>';
+      }).join('　');
+      return '<div style="background:#fff;border:1px solid ' + (canCraft ? '#a0c8a8' : '#c8b89a') + ';border-radius:10px;padding:12px 13px;margin-bottom:8px;cursor:' + (canCraft ? 'pointer' : 'default') + '" data-craft-bp="' + bp.name + '">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        + '<span style="font-size:22px">' + bp.icon + '</span>'
+        + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + bp.name + '</div>'
+        + '<div style="font-size:10px;color:#6b5e4e">' + bp.desc + '</div></div>'
+        + (canCraft ? '<div style="font-size:11px;color:#7b9e87;flex-shrink:0">作る</div>' : '<div style="font-size:11px;color:#c8b89a;flex-shrink:0">素材不足</div>')
+        + '</div>'
+        + '<div style="font-size:10px;line-height:1.8">' + recipeText + '</div>'
+        + '</div>';
+    }).join('');
+
+  container.appendChild(div);
+
+  div.querySelectorAll('[data-craft-bp]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var name = this.getAttribute('data-craft-bp');
+      craftBlueprint(name);
+    });
+  });
+}
+
+function craftBlueprint(name) {
+  var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
+  var bp = BLUEPRINTS.find(function(b){ return b.name === name; });
+  if (!bp) return;
+
+  // 素材チェック
+  var canCraft = bp.recipe.every(function(r) {
+    var inv = G.inventory.find(function(i){ return i.name === r.name; });
+    return inv && (inv.qty || 1) >= r.qty;
+  });
+  if (!canCraft) { toast('素材が足りません'); return; }
+
+  // 素材消費
+  bp.recipe.forEach(function(r) {
+    var inv = G.inventory.find(function(i){ return i.name === r.name; });
+    inv.qty = (inv.qty || 1) - r.qty;
+    if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== r.name; });
+  });
+
+  // 設計図消費
+  var bpItem = G.inventory.find(function(i){ return i.name === bp.name + 'の設計図'; });
+  if (bpItem) {
+    bpItem.qty = (bpItem.qty || 1) - 1;
+    if (bpItem.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== bpItem.name; });
+  }
+
+  // オブジェをインベントリに追加
+  var existing = G.inventory.find(function(i){ return i.name === bp.name && i.type === 'オブジェ'; });
+  if (existing) existing.qty = (existing.qty || 1) + 1;
+  else G.inventory.push({ name: bp.name, type: 'オブジェ', icon: bp.icon, desc: bp.desc, qty: 1, layer: bp.layer });
+
+  saveGame();
+  toast(bp.icon + ' ' + bp.name + 'を作った！');
+  showEventPopup({
+    icon: bp.icon,
+    title: bp.name + ' 完成',
+    body: bp.desc + '\n\n仲間の部屋に飾れるようになった。',
+    buttonLabel: '受け取る',
+  });
+  renderInventory();
 }
 
 function craftEvoStone(layer) {
@@ -2272,6 +2387,15 @@ function useItem(item) {
   if (item.type === 'スキル魂') { openCompPicker(item, 'skill'); return; }
   if (item.type === '進化の石') { openEvoStep1(item); return; }
   if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×10）'); return; }
+  if (item.type === 'オブジェ') { toast(item.name + ' — ' + item.desc + '\n仲間の部屋に飾れます'); return; }
+  if (item.type === '設計図') {
+    var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
+    var bp = BLUEPRINTS.find(function(b){ return b.name === item.blueprintFor; });
+    if (!bp) { toast(item.name + ' — ' + item.desc); return; }
+    var recipeText = bp.recipe.map(function(r){ return r.name + '×' + r.qty; }).join('、');
+    toast('📜 ' + bp.name + 'の設計図\n素材：' + recipeText + '\n実験台でクラフトできます');
+    return;
+  }
   if (item.type === '謎のアイテム') {
     if (G.laterneUnlocked) toast(item.name + ' — Laterneのお店で売れるかもしれない');
     else toast(item.name + ' — 価値がありそうだが、使い道がわからない');
@@ -2757,8 +2881,8 @@ function renderSofa() {
 }
 
 // ── Laterneのお店 ──
-var MYSTERY_ITEMS = ['光る貝殻', '古い羅針盤', '星図'];
-var MYSTERY_PRICES = { '光る貝殻': 8, '古い羅針盤': 12, '星図': 15 };
+var MYSTERY_ITEMS = [];
+var MYSTERY_PRICES = {};
 
 function renderLaterneShop() {
   var sellEl = document.getElementById('laterne-sell');
@@ -3415,6 +3539,7 @@ function loadData(callback) {
       DUNGEONS = d.dungeons;
       ENEMIES  = d.enemies;
       DROPS    = d.drops;
+      window.BLUEPRINTS_DATA = d.blueprints || [];
       if (d.equipGen) EQUIPGEN = d.equipGen;
       injectLayerCSS();
       callback();
@@ -3707,18 +3832,150 @@ function renderRoomResident(roomIdx) {
     : null;
 
   if (resident) {
-    el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #c8b89a;border-radius:12px;padding:12px 14px;cursor:pointer" id="room-change-btn">'
-      + '<div style="width:36px;height:36px;border-radius:50%;background:' + (LCOLOR[resident.layer]||'#c8b89a') + ';display:flex;align-items:center;justify-content:center">'
+    var affection = room.affection || 0;
+    var wish = room.wish || null;
+    var wishText = wish ? '「' + wish + ' がほしいな……」' : companionSpeech(resident);
+    var hearts = '';
+    for (var h = 0; h < Math.min(10, Math.floor(affection / 10)); h++) hearts += '♥';
+    for (var e = Math.min(10, Math.floor(affection / 10)); e < 10; e++) hearts += '♡';
+
+    el.innerHTML =
+      // 仲間カード（タップでwishセリフ）
+      '<div id="room-resident-card" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #c8b89a;border-radius:12px;padding:12px 14px;cursor:pointer;margin-bottom:10px">'
+      + '<div style="width:36px;height:36px;border-radius:50%;background:' + (LCOLOR[resident.layer]||'#c8b89a') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
       + '<img src="' + spriteURL(resident.word, resident.article, resident.layer, resident.level) + '" style="width:24px;height:24px;image-rendering:pixelated"></div>'
-      + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + resident.word + '</div>'
-      + '<div style="font-size:11px;color:#6b5e4e">' + companionSpeech(resident) + '</div></div>'
-      + '<div style="font-size:11px;color:#9a8a7a">変更</div></div>';
+      + '<div style="flex:1">'
+      + '<div style="font-size:13px;color:#2c2416;font-weight:600">' + resident.word + '</div>'
+      + '<div id="room-speech-text" style="font-size:11px;color:#6b5e4e;font-style:italic;margin-top:2px">' + wishText + '</div>'
+      + '</div>'
+      + '<div style="font-size:11px;color:#9a8a7a;flex-shrink:0">変更</div>'
+      + '</div>'
+      // 好感度バー
+      + '<div style="background:#fff;border:1px solid #c8b89a;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+      + '<span style="font-size:10px;color:#9a8a7a;letter-spacing:1px">好感度</span>'
+      + '<span style="font-size:11px;color:#c07080">' + hearts + ' ' + affection + '</span>'
+      + '</div>'
+      + '<div style="height:4px;background:#e0d8c8;border-radius:2px">'
+      + '<div style="height:100%;background:#e08098;border-radius:2px;width:' + Math.min(100, affection) + '%"></div>'
+      + '</div>'
+      + '</div>'
+      // プレゼントボタン
+      + '<button id="room-gift-btn" style="width:100%;background:#f5ede0;border:1px solid #c8b89a;border-radius:12px;padding:11px;font-size:13px;color:#6b5e4e;cursor:pointer;font-family:Georgia,serif;margin-bottom:8px">🎁 プレゼントする</button>'
+      // 飾ってあるもの
+      + (room.items && room.items.length ? '<div style="font-size:11px;color:#9a8a7a;padding:0 2px">'
+        + '飾ってあるもの：' + room.items.map(function(it){ return it.icon + it.name; }).join('　') + '</div>' : '')
+      // 住人変更（小さく下に）
+      + '<div id="room-change-btn" style="text-align:right;padding:4px 2px;font-size:11px;color:#b0a090;cursor:pointer">住人を変更する</div>';
+
+    // 仲間カードタップ → wishセリフトグル
+    var card = document.getElementById('room-resident-card');
+    var speechEl = document.getElementById('room-speech-text');
+    if (card) card.addEventListener('click', function(e) {
+      if (e.target.closest('#room-change-btn')) return;
+      // wishを割り当て（まだなければランダムに選ぶ）
+      if (!room.wish) {
+        var BLUEPRINTS = window.BLUEPRINTS_DATA || [];
+        if (BLUEPRINTS.length) {
+          room.wish = BLUEPRINTS[Math.floor(Math.random() * BLUEPRINTS.length)].name;
+          saveGame();
+        }
+      }
+      if (speechEl) speechEl.textContent = room.wish
+        ? '「' + room.wish + ' がほしいな……」'
+        : companionSpeech(resident);
+    });
+
+    // プレゼントボタン
+    var giftBtn = document.getElementById('room-gift-btn');
+    if (giftBtn) giftBtn.addEventListener('click', function(){ openGiftPicker(roomIdx); });
+
+    // 住人変更
+    var chgBtn = document.getElementById('room-change-btn');
+    if (chgBtn) chgBtn.addEventListener('click', function(){ openResidentPicker(roomIdx); });
+
   } else {
     el.innerHTML = '<div style="background:#f5ede0;border:1px dashed #c8b89a;border-radius:12px;padding:12px 14px;text-align:center;cursor:pointer" id="room-change-btn">'
       + '<div style="font-size:13px;color:#9a8a7a;font-style:italic">誰も住んでいない — タップして住人を選ぶ</div></div>';
+    var btn = document.getElementById('room-change-btn');
+    if (btn) btn.addEventListener('click', function(){ openResidentPicker(roomIdx); });
   }
-  var btn = document.getElementById('room-change-btn');
-  if (btn) btn.addEventListener('click', function(){ openResidentPicker(roomIdx); });
+}
+
+// ── プレゼント選択 ──
+function openGiftPicker(roomIdx) {
+  var room = (G.rooms || [])[roomIdx];
+  var objes = G.inventory.filter(function(i){ return i.type === 'オブジェ' && (i.qty||1) > 0; });
+  if (!objes.length) { toast('渡せるオブジェがありません。実験台で作ろう！'); return; }
+
+  var modal = document.getElementById('comp-picker-modal');
+  var list  = document.getElementById('comp-picker-list');
+  document.getElementById('comp-picker-title').textContent = 'プレゼントするオブジェを選ぶ';
+  var sortBar = document.getElementById('party-sort-bar');
+  if (sortBar) sortBar.remove();
+
+  list.innerHTML = objes.map(function(item) {
+    var isWished = room.wish && item.name === room.wish;
+    return '<div class="picker-row" data-gift-name="' + item.name + '" style="' + (isWished ? 'background:#fff8e8;border-left:3px solid #c8a84b' : '') + '">'
+      + '<span style="font-size:24px;margin-right:4px">' + item.icon + '</span>'
+      + '<div style="flex:1">'
+      + '<div style="font-size:14px;color:#2c2416;font-weight:600">' + item.name + (isWished ? ' ⭐' : '') + '</div>'
+      + '<div style="font-size:10px;color:#6b5e4e">×' + (item.qty||1) + (isWished ? '　— 欲しがっている！' : '') + '</div>'
+      + '</div></div>';
+  }).join('');
+
+  list.querySelectorAll('[data-gift-name]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var name = this.getAttribute('data-gift-name');
+      closeCompPicker();
+      giveGift(roomIdx, name);
+    });
+  });
+  modal.style.display = 'flex';
+}
+
+// ── プレゼントを渡す ──
+function giveGift(roomIdx, itemName) {
+  var room = (G.rooms || [])[roomIdx];
+  if (!room) return;
+  var resident = room.resident ? G.companions.find(function(c){ return c.word === room.resident; }) : null;
+  if (!resident) { toast('住人がいません'); return; }
+
+  // インベントリから消費
+  var inv = G.inventory.find(function(i){ return i.name === itemName && i.type === 'オブジェ'; });
+  if (!inv || (inv.qty||1) <= 0) { toast('アイテムがありません'); return; }
+  inv.qty = (inv.qty||1) - 1;
+  if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return !(i.name === itemName && i.type === 'オブジェ'); });
+
+  // 部屋に飾る
+  if (!room.items) room.items = [];
+  var bp = (window.BLUEPRINTS_DATA || []).find(function(b){ return b.name === itemName; });
+  room.items.push({ name: itemName, icon: bp ? bp.icon : '🎁' });
+
+  // 好感度+10
+  room.affection = (room.affection || 0) + 10;
+
+  // wishと一致していたらwishをリセット
+  var wasWished = room.wish === itemName;
+  if (wasWished) room.wish = null;
+
+  saveGame();
+
+  // お礼セリフ
+  var thankMsg = wasWished
+    ? '「わあ！' + itemName + '！　ありがとう、嬉しい！」'
+    : '「ありがとう……！　大切にするね。」';
+
+  showEventPopup({
+    icon: bp ? bp.icon : '🎁',
+    title: resident.word + ' にプレゼントした',
+    body: thankMsg + '\n\n部屋に飾られた。\n好感度 +10',
+    buttonLabel: '良かった',
+    onClose: function() {
+      renderRoomCanvas(roomIdx);
+      renderRoomResident(roomIdx);
+    }
+  });
 }
 
 function openResidentPicker(roomIdx) {
@@ -3746,6 +4003,7 @@ function openResidentPicker(roomIdx) {
       var name = this.getAttribute('data-name') || null;
       if (!G.rooms[roomIdx]) return;
       G.rooms[roomIdx].resident = name;
+      G.rooms[roomIdx].wish = null; // 住人が変わったらwishリセット
       saveGame();
       closeCompPicker();
       renderRoomCanvas(roomIdx);
@@ -3894,6 +4152,34 @@ function renderRoomCanvas(roomIdx) {
       ctx.beginPath();
       ctx.ellipse(sx + sw * 0.38, sy + sh * 0.7, sw * 0.12, sh * 0.14, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // ── 飾ってあるオブジェ（ソファ右側の床）──
+    var placedItems = room && room.items ? room.items : [];
+    if (placedItems.length) {
+      var objStartX = sx + sw + 10;
+      var objY = H * 0.72 + 4;
+      var objSize = 22;
+      var objGap = 28;
+      ctx.font = objSize + 'px serif';
+      ctx.textAlign = 'center';
+      placedItems.slice(0, 4).forEach(function(item, ii) {
+        var ox = objStartX + ii * objGap + objSize / 2;
+        var oy = objY + 26;
+        // 台座（小さな影）
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        ctx.beginPath();
+        ctx.ellipse(ox, oy + 4, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // 絵文字
+        ctx.fillText(item.icon, ox, oy);
+        // 名前ラベル（短縮）
+        ctx.font = '7px Georgia, serif';
+        ctx.fillStyle = 'rgba(80,60,40,0.6)';
+        var shortName = item.name.split('（')[0];
+        ctx.fillText(shortName, ox, oy + 14);
+        ctx.font = objSize + 'px serif';
+      });
     }
 
     _roomAnimId = requestAnimationFrame(drawRoom);
