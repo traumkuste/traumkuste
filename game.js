@@ -3299,6 +3299,7 @@ function bindAll() {
     var el = document.getElementById('layer-' + l);
     if (el) el.addEventListener('click', function() {
       if (l === '湖' && G.mirrorRoomUnlocked) { openMirrorRoom(); return; }
+      if (l === '浜辺' && G.apartmentUnlocked) { openApartmentList(); return; }
       var ws = G.words.filter(function(w){ return w.layer === l; });
       if (!ws.length) { toast(l + 'にはまだ言葉がない'); return; }
       toast(l + ': ' + ws.slice(0,3).map(function(w){ return w.word; }).join('・') + (ws.length > 3 ? '...' : ''));
@@ -3607,9 +3608,8 @@ function closeMirrorRoom() { closeMirrorRoomScreen(); }
 var ROOM_PRICES = [0, 100, 300, 800, 2000, 5000]; // 部屋1は無料、2以降は購入
 
 function updateApartmentBtn() {
-  var btn = document.getElementById('btn-apartment');
-  if (!btn) return;
-  btn.style.display = G.apartmentUnlocked ? 'block' : 'none';
+  var hint = document.getElementById('apt-hint');
+  if (hint) hint.style.display = G.apartmentUnlocked ? 'block' : 'none';
 }
 
 function openApartmentList() {
