@@ -3608,11 +3608,11 @@ var DRESSER_TEXTS = [
 ];
 
 var MIRROR_ROOM_SPEECHES = [
-  '「！」',
-  '「遊ぼう」',
-  '「・・・。」',
-  '「きらきら。」',
-  '「おーい」',
+  '「素敵な場所だ！」',
+  '「ここで遊びたい……」',
+  '「なんだか、不思議な気持ちになる。」',
+  '「きらきらしてる。」',
+  '「静かで、いい。」',
   '「ここに住みたいな。」',
 ];
 
@@ -3909,7 +3909,7 @@ function renderRoomResident(roomIdx) {
 function openGiftPicker(roomIdx) {
   var room = (G.rooms || [])[roomIdx];
   var objes = G.inventory.filter(function(i){ return i.type === 'オブジェ' && (i.qty||1) > 0; });
-  if (!objes.length) { toast('まだ渡せるオブジェがありません。'); return; }
+  if (!objes.length) { toast('渡せるオブジェがありません。実験台で作ろう！'); return; }
 
   var modal = document.getElementById('comp-picker-modal');
   var list  = document.getElementById('comp-picker-list');
