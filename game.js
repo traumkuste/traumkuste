@@ -50,6 +50,8 @@ var G = {
   mirrorRoomUnlocked: false,
   stormFrames: [],
   stormCleared: {},
+  apartmentUnlocked: false,
+  rooms: [],  // [{ id:0, unlocked:true, resident: 'Wort' or null, wallpaper:'stripe' }]
 };
 // ── UTILS ──
 function toast(msg) {
@@ -451,7 +453,8 @@ function showScreen(id) {
     showScreen('livelog-screen');
     return;
   }
-  if (id === 'world-screen') checkOmiyage();
+  if (id === 'apartment-screen') renderApartmentList();
+  if (id === 'room-screen' && _currentRoomIdx !== null) renderRoomResident(_currentRoomIdx);
   if (id === 'companions-screen') renderCompanions();
   if (id === 'sofa-screen') { renderSofa(); initDataManagement(); }
   if (id === 'bookshelf-screen') renderBookshelf();
@@ -2931,6 +2934,23 @@ function checkDungeonClear(dungName) {
           buttonLabel: '帰還する',
           bgColor: hexToRgba('#508CA4', 0.85),
           innerBg: '#e8f4fc',
+          onClose: function() {
+            if (!G.apartmentUnlocked) {
+              setTimeout(function(){
+                showEventPopup({
+                  icon: '🦀', title: 'ヤドカリ不動産',
+                  body: 'やあ、旅人さん。\n浜辺に、空き家があるんです。\n\nいい感じの部屋でね、\nひと部屋から使えますよ。\n行ってみますか？',
+                  buttonLabel: '行ってみる',
+                  onClose: function() {
+                    G.apartmentUnlocked = true;
+                    saveGame();
+                    updateApartmentBtn();
+                    openApartmentList();
+                  }
+                });
+              }, 400);
+            }
+          }
         });
       }, 1000);
     } else if (dungName === '深海神殿') {
@@ -3126,6 +3146,8 @@ function saveGame() {
       mirrorRoomUnlocked: G.mirrorRoomUnlocked || false,
       stormFrames: G.stormFrames || [],
       stormCleared: G.stormCleared || {},
+      apartmentUnlocked: G.apartmentUnlocked || false,
+      rooms: G.rooms || [],
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -3167,6 +3189,8 @@ function loadGame() {
     G.mirrorRoomUnlocked = data.mirrorRoomUnlocked || false;
     G.stormFrames = data.stormFrames || [];
     G.stormCleared = data.stormCleared || {};
+    G.apartmentUnlocked = data.apartmentUnlocked || false;
+    G.rooms = data.rooms || [];
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
@@ -3273,16 +3297,13 @@ function bindAll() {
   ['空中都市','湖','庭','浜辺','海','深海'].forEach(function(l) {
     var el = document.getElementById('layer-' + l);
     if (el) el.addEventListener('click', function() {
-      // 湖は人魚の部屋フラグが立っていれば専用モーダルへ
-      if (l === '湖' && G.mirrorRoomUnlocked) {
-        openMirrorRoom();
-        return;
-      }
+      if (l === '湖' && G.mirrorRoomUnlocked) { openMirrorRoom(); return; }
       var ws = G.words.filter(function(w){ return w.layer === l; });
       if (!ws.length) { toast(l + 'にはまだ言葉がない'); return; }
       toast(l + ': ' + ws.slice(0,3).map(function(w){ return w.word; }).join('・') + (ws.length > 3 ? '...' : ''));
     });
   });
+  updateApartmentBtn();
 
   // home
   document.getElementById('btn-goto-sofa').addEventListener('click', function(){ renderSofa(); showScreen('sofa-screen'); });
@@ -3584,8 +3605,324 @@ function closeMirrorRoomScreen() {
 // 旧モーダル互換（呼び出し箇所があれば）
 function closeMirrorRoom() { closeMirrorRoomScreen(); }
 
-// ──────────────────────────────────────────────
-//  浜辺アニメーション（波＋きらめき）
+// ══════════════════════════════════════════════
+//  アパートメントシステム
+// ══════════════════════════════════════════════
+
+var ROOM_PRICES = [0, 100, 300, 800, 2000, 5000]; // 部屋1は無料、2以降は購入
+
+function updateApartmentBtn() {
+  var btn = document.getElementById('btn-apartment');
+  if (!btn) return;
+  btn.style.display = G.apartmentUnlocked ? 'block' : 'none';
+}
+
+function openApartmentList() {
+  var screen = document.getElementById('apartment-screen');
+  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
+  screen.classList.add('active');
+  renderApartmentList();
+}
+
+function renderApartmentList() {
+  var el = document.getElementById('apartment-list');
+  if (!el) return;
+
+  // 部屋データを最大6室分表示（解放済み＋次の1室）
+  var rooms = G.rooms || [];
+  var html = '';
+  var MAX_ROOMS = 6;
+
+  for (var i = 0; i < MAX_ROOMS; i++) {
+    var room = rooms[i];
+    var unlocked = room && room.unlocked;
+    var resident = unlocked && room.resident
+      ? G.companions.find(function(c){ return c.word === room.resident; })
+      : null;
+
+    if (unlocked) {
+      var avatarBlock = resident
+        ? '<div style="width:44px;height:44px;border-radius:50%;background:' + (LCOLOR[resident.layer]||'#c8b89a') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+          + '<img src="' + spriteURL(resident.word, resident.article, resident.layer, resident.level) + '" style="width:30px;height:30px;image-rendering:pixelated" alt=""></div>'
+        : '<div style="width:44px;height:44px;border-radius:50%;background:#e0d8c8;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px">🛋️</div>';
+      html += '<div class="apt-room-card" data-room="' + i + '" style="background:#fff;border:1px solid #c8b89a;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px">'
+        + avatarBlock
+        + '<div style="flex:1">'
+        + '<div style="font-size:14px;color:#2c2416;font-weight:600">部屋 ' + (i+1) + '</div>'
+        + '<div style="font-size:12px;color:#6b5e4e;margin-top:2px">' + (resident ? resident.word + ' が住んでいる' : '空き部屋') + '</div>'
+        + '</div>'
+        + '<div style="font-size:18px">→</div>'
+        + '</div>';
+    } else if (i === rooms.length) {
+      // 次に解放できる部屋
+      var price = ROOM_PRICES[i] || (ROOM_PRICES[ROOM_PRICES.length-1] * Math.pow(2, i - ROOM_PRICES.length + 1));
+      html += '<div class="apt-room-buy" data-room="' + i + '" style="background:#f5ede0;border:1px dashed #c8b89a;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px">'
+        + '<div style="width:44px;height:44px;border-radius:50%;background:#e8e0d0;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px">🔑</div>'
+        + '<div style="flex:1">'
+        + '<div style="font-size:14px;color:#6b5e4e">部屋 ' + (i+1) + ' を開放する</div>'
+        + '<div style="font-size:12px;color:#9a8a7a;margin-top:2px">' + (price === 0 ? '無料' : price + ' Taler') + '</div>'
+        + '</div>'
+        + '</div>';
+      break;
+    } else {
+      break;
+    }
+  }
+  el.innerHTML = html;
+
+  // 解放済み部屋タップ
+  el.querySelectorAll('.apt-room-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var idx = parseInt(this.getAttribute('data-room'));
+      openRoomScreen(idx);
+    });
+  });
+
+  // 部屋購入タップ
+  el.querySelectorAll('.apt-room-buy').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var idx = parseInt(this.getAttribute('data-room'));
+      var price = ROOM_PRICES[idx] !== undefined ? ROOM_PRICES[idx]
+        : ROOM_PRICES[ROOM_PRICES.length-1] * Math.pow(2, idx - ROOM_PRICES.length + 1);
+      if (price > 0 && G.taler < price) { toast('Talerが足りません（' + price + 'T必要）'); return; }
+      if (price > 0) G.taler -= price;
+      if (!G.rooms) G.rooms = [];
+      G.rooms.push({ id: idx, unlocked: true, resident: null, wallpaper: 'stripe' });
+      saveGame();
+      toast('部屋 ' + (idx+1) + ' を開放しました！');
+      renderApartmentList();
+    });
+  });
+}
+
+// 部屋の中画面
+var _roomAnimId = null;
+var _currentRoomIdx = null;
+
+function openRoomScreen(roomIdx) {
+  _currentRoomIdx = roomIdx;
+  var screen = document.getElementById('room-screen');
+  document.querySelectorAll('.screen.active').forEach(function(s){ s.classList.remove('active'); });
+  screen.classList.add('active');
+  document.getElementById('room-screen-title').textContent = '部屋 ' + (roomIdx + 1);
+  renderRoomCanvas(roomIdx);
+  renderRoomResident(roomIdx);
+}
+
+function renderRoomResident(roomIdx) {
+  var room = (G.rooms || [])[roomIdx];
+  var el = document.getElementById('room-resident-area');
+  if (!el) return;
+  var resident = room && room.resident
+    ? G.companions.find(function(c){ return c.word === room.resident; })
+    : null;
+
+  if (resident) {
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #c8b89a;border-radius:12px;padding:12px 14px;cursor:pointer" id="room-change-btn">'
+      + '<div style="width:36px;height:36px;border-radius:50%;background:' + (LCOLOR[resident.layer]||'#c8b89a') + ';display:flex;align-items:center;justify-content:center">'
+      + '<img src="' + spriteURL(resident.word, resident.article, resident.layer, resident.level) + '" style="width:24px;height:24px;image-rendering:pixelated"></div>'
+      + '<div style="flex:1"><div style="font-size:13px;color:#2c2416;font-weight:600">' + resident.word + '</div>'
+      + '<div style="font-size:11px;color:#6b5e4e">' + companionSpeech(resident) + '</div></div>'
+      + '<div style="font-size:11px;color:#9a8a7a">変更</div></div>';
+  } else {
+    el.innerHTML = '<div style="background:#f5ede0;border:1px dashed #c8b89a;border-radius:12px;padding:12px 14px;text-align:center;cursor:pointer" id="room-change-btn">'
+      + '<div style="font-size:13px;color:#9a8a7a;font-style:italic">誰も住んでいない — タップして住人を選ぶ</div></div>';
+  }
+  var btn = document.getElementById('room-change-btn');
+  if (btn) btn.addEventListener('click', function(){ openResidentPicker(roomIdx); });
+}
+
+function openResidentPicker(roomIdx) {
+  var avail = G.companions.filter(function(c){
+    return c.status === '正式加入';
+  });
+  if (!avail.length) { toast('正式加入の仲間がいません'); return; }
+
+  var modal = document.getElementById('comp-picker-modal');
+  var list  = document.getElementById('comp-picker-list');
+  document.getElementById('comp-picker-title').textContent = '部屋に住む仲間を選ぶ';
+  var sortBar = document.getElementById('party-sort-bar');
+  if (sortBar) sortBar.remove();
+
+  list.innerHTML = [{ word: null }].concat(avail).map(function(c) {
+    if (!c.word) return '<div class="picker-row" data-mode="resident" data-name="" style="color:#9a8a7a;font-style:italic">— 住人なし（空き部屋にする）</div>';
+    return '<div class="picker-row" data-mode="resident" data-name="' + c.word + '">'
+      + avatarHTML(c, 36)
+      + '<div style="flex:1"><div style="font-size:14px;color:#2c2416;font-weight:600">' + c.word + '</div>'
+      + '<div style="font-size:10px;color:#6b5e4e">Lv.' + c.level + ' / ' + c.layer + '</div></div></div>';
+  }).join('');
+
+  list.querySelectorAll('.picker-row[data-mode="resident"]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var name = this.getAttribute('data-name') || null;
+      if (!G.rooms[roomIdx]) return;
+      G.rooms[roomIdx].resident = name;
+      saveGame();
+      closeCompPicker();
+      renderRoomCanvas(roomIdx);
+      renderRoomResident(roomIdx);
+    });
+  });
+  modal.style.display = 'flex';
+}
+
+// ── 部屋のcanvas描画 ──
+function renderRoomCanvas(roomIdx) {
+  if (_roomAnimId) { cancelAnimationFrame(_roomAnimId); _roomAnimId = null; }
+  var canvas = document.getElementById('room-canvas');
+  if (!canvas) return;
+  var W = canvas.offsetWidth || 360;
+  var H = Math.round(W * 0.72);
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext('2d');
+
+  var room = (G.rooms || [])[roomIdx];
+  var resident = room && room.resident
+    ? G.companions.find(function(c){ return c.word === room.resident; })
+    : null;
+
+  // スプライト画像の読み込み
+  var spriteImg = null;
+  var spriteReady = false;
+  if (resident) {
+    spriteImg = new Image();
+    spriteImg.onload = function(){ spriteReady = true; };
+    spriteImg.src = spriteURL(resident.word, resident.article, resident.layer, resident.level);
+  }
+
+  function drawRoom(t) {
+    ctx.clearRect(0, 0, W, H);
+
+    // ── 壁（ストライプ壁紙）──
+    var stripeW = 18;
+    for (var x = 0; x < W; x += stripeW * 2) {
+      ctx.fillStyle = '#f0eae0';
+      ctx.fillRect(x, 0, stripeW, H * 0.72);
+      ctx.fillStyle = '#e8dfd4';
+      ctx.fillRect(x + stripeW, 0, stripeW, H * 0.72);
+    }
+
+    // 幅木
+    ctx.fillStyle = '#d4c8b4';
+    ctx.fillRect(0, H * 0.72, W, 4);
+
+    // ── タイル床 ──
+    var tileW = 28, tileH = 14;
+    for (var ty = 0; ty < Math.ceil(H * 0.28 / tileH) + 1; ty++) {
+      for (var tx = 0; tx < Math.ceil(W / tileW) + 1; tx++) {
+        var odd = (tx + ty) % 2 === 0;
+        ctx.fillStyle = odd ? '#d8cfc4' : '#c8bdb0';
+        var fx = tx * tileW + (ty % 2 === 0 ? 0 : tileW / 2) - tileW;
+        var fy = H * 0.72 + 4 + ty * tileH;
+        ctx.beginPath();
+        ctx.moveTo(fx + tileW/2, fy);
+        ctx.lineTo(fx + tileW,   fy + tileH/2);
+        ctx.lineTo(fx + tileW/2, fy + tileH);
+        ctx.lineTo(fx,           fy + tileH/2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#bdb0a4';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+
+    // ── 窓 ──
+    var wx = W * 0.62, wy = H * 0.07, ww = W * 0.28, wh = H * 0.38;
+    // 窓枠
+    ctx.fillStyle = '#c8b89a';
+    ctx.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
+    // 空（水色グラデーション）
+    var skyGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+    skyGrad.addColorStop(0, '#b8d8f0');
+    skyGrad.addColorStop(1, '#d8eef8');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(wx, wy, ww, wh);
+    // 海面（下1/3）
+    ctx.fillStyle = '#7ab8d4';
+    ctx.fillRect(wx, wy + wh * 0.65, ww, wh * 0.35);
+    // 窓の桟
+    ctx.strokeStyle = '#c8b89a';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(wx + ww/2, wy); ctx.lineTo(wx + ww/2, wy + wh); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx, wy + wh/2); ctx.lineTo(wx + ww, wy + wh/2); ctx.stroke();
+    // カーテン（左右）
+    ctx.fillStyle = 'rgba(220,200,180,0.7)';
+    ctx.fillRect(wx - 10, wy - 6, 14, wh + 10);
+    ctx.fillRect(wx + ww - 4, wy - 6, 14, wh + 10);
+
+    // ── ソファ ──
+    var sx = W * 0.08, sy = H * 0.52;
+    var sw = W * 0.46, sh = H * 0.22;
+    // ソファ脚
+    ctx.fillStyle = '#8a7060';
+    ctx.fillRect(sx + 6,        sy + sh - 2, 8, 10);
+    ctx.fillRect(sx + sw - 14,  sy + sh - 2, 8, 10);
+    // ソファ本体
+    var sofaGrad = ctx.createLinearGradient(sx, sy, sx, sy + sh);
+    sofaGrad.addColorStop(0, '#c8a878');
+    sofaGrad.addColorStop(1, '#a88858');
+    ctx.fillStyle = sofaGrad;
+    ctx.beginPath();
+    ctx.roundRect(sx, sy + sh * 0.22, sw, sh * 0.78, 8);
+    ctx.fill();
+    // 背もたれ
+    ctx.fillStyle = '#b89868';
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, sw, sh * 0.38, [8, 8, 0, 0]);
+    ctx.fill();
+    // 肘掛け（左）
+    ctx.fillStyle = '#a08858';
+    ctx.beginPath();
+    ctx.roundRect(sx, sy + sh * 0.15, sw * 0.1, sh * 0.7, 6);
+    ctx.fill();
+    // 肘掛け（右）
+    ctx.beginPath();
+    ctx.roundRect(sx + sw - sw * 0.1, sy + sh * 0.15, sw * 0.1, sh * 0.7, 6);
+    ctx.fill();
+    // クッション線
+    ctx.strokeStyle = '#c8a070';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(sx + sw/2, sy + sh*0.22); ctx.lineTo(sx + sw/2, sy + sh); ctx.stroke();
+
+    // ── 仲間スプライト（ソファに座っている）──
+    if (resident && spriteReady && spriteImg) {
+      var bobY = Math.sin(t * 0.001) * 3;
+      var sprW = Math.round(W * 0.18);
+      var sprX = sx + sw * 0.3;
+      var sprY = sy + sh * 0.05 + bobY;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(spriteImg, sprX, sprY, sprW, sprW);
+
+      // 仲間の名前ラベル
+      ctx.font = '11px Georgia, serif';
+      ctx.fillStyle = 'rgba(44,36,22,0.7)';
+      ctx.textAlign = 'center';
+      ctx.fillText(resident.word, sprX + sprW/2, sprY + sprW + 14);
+    } else if (!resident) {
+      // 空き部屋：ソファに座布団だけ
+      ctx.fillStyle = '#d4b890';
+      ctx.beginPath();
+      ctx.ellipse(sx + sw * 0.38, sy + sh * 0.7, sw * 0.12, sh * 0.14, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    _roomAnimId = requestAnimationFrame(drawRoom);
+  }
+
+  _roomAnimId = requestAnimationFrame(drawRoom);
+}
+
+function closeRoomScreen() {
+  if (_roomAnimId) { cancelAnimationFrame(_roomAnimId); _roomAnimId = null; }
+  openApartmentList();
+}
+
+function closeApartmentList() {
+  var screen = document.getElementById('apartment-screen');
+  screen.classList.remove('active');
+  showScreen('world-screen');
+}
 // ──────────────────────────────────────────────
 (function() {
   function initShore() {

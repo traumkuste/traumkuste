@@ -51,6 +51,9 @@
     <div class="layer-row l-lake" id="layer-湖"><div class="lname">湖</div><div class="ldesc">静けさ・感情・記憶</div><div class="lcnt" id="lc-湖">0語</div></div>
     <div class="layer-row l-garden" id="layer-庭"><div class="lname">庭</div><div class="ldesc">植物・虫・生き物</div><div class="lcnt" id="lc-庭">0語</div></div>
     <div class="layer-row l-shore" id="layer-浜辺"><div class="lname">浜辺</div><div class="ldesc">もの・出来事</div><div class="lcnt" id="lc-浜辺">0語</div></div>
+    <div id="btn-apartment" style="display:none;background:#fff;border:1px solid #c8b89a;border-radius:10px;margin:-2px 0 8px 12px;padding:9px 14px;cursor:pointer;font-family:Georgia,serif;font-size:13px;color:#6b5e4e;display:none" onclick="openApartmentList()">
+      🏠 アパートメントへ
+    </div>
     <div class="layer-row l-sea" id="layer-海"><div class="lname">海</div><div class="ldesc">感覚・自然</div><div class="lcnt" id="lc-海">0語</div></div>
     <div class="layer-row l-deep" id="layer-深海"><div class="lname">深海</div><div class="ldesc">抽象的・忘れたくない</div><div class="lcnt" id="lc-深海">0語</div></div>
     <div id="laterne-row" style="display:none;background:#0a1628;border-radius:12px;margin-bottom:8px;padding:13px 14px;cursor:pointer;color:#b8d4f0" onclick="showScreen('laterne-screen');renderLaterneShop()">
@@ -417,6 +420,30 @@
 </div>
 
   </div>
+
+<!-- ===== アパートメント一覧 ===== -->
+<div id="apartment-screen" class="screen" style="background:#f5f0e8">
+  <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 0;position:sticky;top:0;background:#f5f0e8;z-index:10">
+    <button onclick="closeApartmentList()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#6b5e4e;font-family:Georgia,serif;padding:4px 8px">←</button>
+    <div style="font-size:16px;color:#2c2416;font-style:italic;letter-spacing:1px">アパートメント</div>
+  </div>
+  <div style="padding:6px 4px 4px;text-align:center">
+    <div style="font-size:11px;color:#9a8a7a;font-style:italic">浜辺に建つ、小さなアパートメント</div>
+  </div>
+  <div id="apartment-list" style="padding:12px 16px;flex:1;overflow-y:auto"></div>
+</div>
+
+<!-- ===== 部屋の中 ===== -->
+<div id="room-screen" class="screen" style="background:#f5f0e8">
+  <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 0;position:sticky;top:0;background:#f5f0e8;z-index:10">
+    <button onclick="closeRoomScreen()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#6b5e4e;font-family:Georgia,serif;padding:4px 8px">←</button>
+    <div id="room-screen-title" style="font-size:16px;color:#2c2416;font-style:italic;letter-spacing:1px">部屋 1</div>
+  </div>
+  <!-- 部屋のcanvas -->
+  <canvas id="room-canvas" style="width:100%;display:block;image-rendering:pixelated"></canvas>
+  <!-- 住人エリア -->
+  <div id="room-resident-area" style="padding:14px 16px"></div>
+</div>
 
 <!-- ===== 汎用演出ポップアップ ===== -->
 <div id="event-popup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:600;align-items:center;justify-content:center">
