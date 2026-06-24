@@ -490,6 +490,49 @@
   </div>
 </div>
 
+<!-- ===== 夜の森：分岐選択 ===== -->
+<div id="forest-choice-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(8,18,12,0.92);z-index:500;align-items:center;justify-content:center">
+  <div style="background:#0d1f12;border:1px solid #2e5a38;border-radius:20px;width:88%;max-width:320px;padding:28px 22px;text-align:center;box-shadow:0 0 40px rgba(60,160,90,0.18)">
+    <div style="font-size:10px;letter-spacing:4px;color:#2e5a38;margin-bottom:10px">N A C H T W A L D</div>
+    <div id="forest-schritt-text" style="font-size:36px;color:#b8e0c0;font-style:italic;letter-spacing:2px;margin-bottom:4px">1歩目</div>
+    <div style="font-size:12px;color:#3a7048;margin-bottom:22px">夜の森</div>
+    <div id="forest-flavor-text" style="font-size:13px;color:#7ab28a;line-height:1.9;margin-bottom:26px;font-style:italic;min-height:50px;padding:0 4px"></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button onclick="forestChoose('left')" style="background:#16331e;border:1px solid #3a7a4a;border-radius:14px;padding:13px 16px;color:#b8e0c0;font-size:14px;cursor:pointer;font-family:Georgia,serif;letter-spacing:1px">
+        左の道へ
+      </button>
+      <button onclick="forestChoose('right')" style="background:#16331e;border:1px solid #3a7a4a;border-radius:14px;padding:13px 16px;color:#b8e0c0;font-size:14px;cursor:pointer;font-family:Georgia,serif;letter-spacing:1px">
+        右の道へ
+      </button>
+      <button onclick="forestChoose('back')" style="background:#0a1810;border:1px solid #1e3a26;border-radius:14px;padding:11px 16px;color:#4a8058;font-size:13px;cursor:pointer;font-family:Georgia,serif">
+        ← 戻る
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 夜の森：蛍とのbefriendクイズ ===== -->
+<div id="firefly-quiz-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,5,30,0.93);z-index:600;align-items:center;justify-content:center">
+  <div style="background:#150a30;border:1px solid #5a3a8a;border-radius:20px;width:88%;max-width:320px;padding:28px 22px;text-align:center;box-shadow:0 0 40px rgba(140,100,220,0.2)">
+    <div style="font-size:30px;margin-bottom:10px">✨</div>
+    <div style="font-size:15px;color:#d8c0f8;font-style:italic;margin-bottom:6px">Glühwürmchen</div>
+    <div id="firefly-quiz-body" style="font-size:13px;color:#a888d0;line-height:1.8;margin-bottom:18px"></div>
+    <div style="font-size:12px;color:#7a5aa8;margin-bottom:14px">この言葉の冠詞は？</div>
+    <div id="firefly-quiz-choices" style="display:flex;gap:8px;justify-content:center"></div>
+  </div>
+</div>
+
+<!-- ===== 夜の森：白鳥と水底からの手 ===== -->
+<div id="swan-intro-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(5,10,25,0.94);z-index:600;align-items:center;justify-content:center">
+  <div style="background:#0a1530;border:1px solid #3a5a8a;border-radius:20px;width:88%;max-width:320px;padding:28px 22px;text-align:center;box-shadow:0 0 40px rgba(80,120,200,0.2)">
+    <div style="font-size:30px;margin-bottom:10px">🦢</div>
+    <div id="swan-intro-text" style="font-size:13px;color:#8aacd8;line-height:1.9;margin-bottom:22px;font-style:italic"></div>
+    <button onclick="startSwanBattle()" style="background:#162840;border:1px solid #4a7aaa;border-radius:14px;padding:13px 24px;color:#b8d4f0;font-size:14px;cursor:pointer;font-family:Georgia,serif;letter-spacing:1px">
+      助けに行く
+    </button>
+  </div>
+</div>
+
 <script src="game.js"></script>
 </body>
 </html>

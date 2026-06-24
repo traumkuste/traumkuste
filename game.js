@@ -19,6 +19,15 @@ function weightedRand(pool) {
 
 const XP_PER_LEVEL = 100;
 
+// ── 予兆システム（戦闘中にランダム発生するドイツ語の異変） ──
+var OMENS = [
+  { key: 'nebel',     text: '不意に Geisternebel（怪しい霧）が立ち込めた' },
+  { key: 'kaelte',    text: 'Kälte（冷気）が肌を刺す' },
+  { key: 'schatten',  text: 'Schatten（影）が動いた' },
+  { key: 'fluestern', text: 'Flüstern（囁き）が聞こえる' },
+  { key: 'risse',     text: 'Risse（ひび割れ）が水面に走った' },
+];
+
 // ── STATE ──
 var G = {
   words: [],
@@ -51,7 +60,8 @@ var G = {
   stormFrames: [],
   stormCleared: {},
   apartmentUnlocked: false,
-  rooms: [],  // [{ id:0, unlocked:true, resident: 'Wort' or null, wallpaper:'stripe' }]
+  rooms: [],
+  partners: [],  // [{ id:0, unlocked:true, resident: 'Wort' or null, wallpaper:'stripe' }]
 };
 // ── UTILS ──
 function toast(msg) {
@@ -1021,6 +1031,7 @@ function renderCompanions() {
       + (c.ancestry && c.ancestry.length ? '<div style="font-size:10px;color:#9a8a7a;font-style:italic;margin-top:2px">' + c.ancestry[c.ancestry.length-1] + '</div>' : '')
 + (companionSpeech(c) ? '<div class="comp-speech" data-cidx="' + cIdx + '" style="display:none">' + companionSpeech(c) + '</div>' : '')
       + (prov ? '' : '<button class="equip-mgr-btn" data-cidx="' + cIdx + '" style="margin-top:5px;font-size:10px;padding:3px 10px;border:1px solid #c8b89a;border-radius:10px;background:#f5f0e8;cursor:pointer;font-family:Georgia,serif;color:#6b5e4e">装備を管理</button>')
+      + (prov ? '' : renderPartnerBadge(c, cIdx))
       + '<div class="hp-bar" style="margin-top:5px"><div class="hp-fill" style="width:' + hpPct + '%"></div></div>'
       + '<div class="xp-bar"><div class="xp-fill" style="width:' + xpPct + '%"></div></div>'
       + '</div>'
@@ -1033,6 +1044,14 @@ function renderCompanions() {
       e.stopPropagation();
       var cidx = parseInt(this.getAttribute('data-cidx'));
       openEquipManager(cidx);
+    });
+  });
+  // パートナー管理ボタン
+  el.querySelectorAll('.partner-mgr-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var word = this.getAttribute('data-word');
+      openPartnerPicker(word);
     });
   });
   // 仲間カードタップで台詞表示
@@ -1170,6 +1189,8 @@ function renderDungeon() {
     }
     var timeStr = d.type === 'floor'
       ? '5階ごとに帰還判断 • 最深記録: ' + (G.deepestFloor || 0) + '階'
+      : d.type === 'forest'
+      ? '左・右・戻るの分かれ道 • 全30歩'
       : '所要時間 約' + d.dur + '秒（実時間）• 敵' + d.encounters + '体';
     return '<div class="dcard' + (G.selDungeon && G.selDungeon.id === d.id ? ' sel' : '') + '" data-dung="' + d.id + '">'
       + '<div class="dcard-name">' + d.name + '</div>'
@@ -1385,6 +1406,16 @@ function sendParty() {
     return;
   }
 
+  // 夜の森（Schritt制）は専用ルートへ
+  if (dung.type === 'forest') {
+    G.party = [];
+    G.selDungeon = null;
+    startForestDungeon(party, dung);
+    if (typeof dungFx !== 'undefined') dungFx.start(dung.layer);
+    showScreen('livelog-screen');
+    return;
+  }
+
   var lightInv = G.inventory.find(function(i){ return i.name === '深海の灯り'; });
   var useLight = !!lightInv;
   if (useLight) { consumeItem('深海の灯り'); toast('深海の灯りを持って出発した。'); }
@@ -1396,7 +1427,7 @@ function sendParty() {
 }
 
 // ── LIVE DUNGEON ──
-var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [], floorMode: false, levelUps: [] };
+var dungState = { interval: null, elapsed: 0, duration: 0, party: [], dung: null, events: [], failed: false, inBattle: false, pendingFinish: false, herbUsed: false, dropBoost: false, active: false, startedAt: 0, battleLog: [], currentEnemy: null, sessionItems: [], floorMode: false, forestMode: false, levelUps: [] };
 
 function startDungeon(party, dung, dropBoost) {
   dungState.party = party;
@@ -1491,8 +1522,15 @@ function triggerBattle(isBoss) {
   var enemy = isBoss ? '深淵の王' : rand(enemyTable);
   var enemyAtk, enemyDef, enemyHP;
   var isDeepSea = dungLayer === '深海';
-  // ── フロアモード（水鏡の路）の敵ステータス ──
-  if (dungState.floorMode) {
+  // ── 夜の森（Schritt制）の敵ステータス ──
+  if (dungState.forestMode) {
+    var s = forestState.schritt;
+    var gardenEnemies = (ENEMIES['庭'] && ENEMIES['庭'].length) ? ENEMIES['庭'] : ['夜の蛾', '茂みの影', '木霊'];
+    if (!isBoss) enemy = rand(gardenEnemies);
+    enemyAtk = Math.floor(7 + s * 1.4) + Math.floor(Math.random() * 6);
+    enemyDef = Math.floor(4 + s * 0.9) + Math.floor(Math.random() * 4);
+    enemyHP  = Math.floor(55 + s * 12) + Math.floor(Math.random() * Math.max(15, s * 5));
+  } else if (dungState.floorMode) {
     var f = mirrorState.floor;
     var lakeEnemies = (ENEMIES['湖'] && ENEMIES['湖'].length) ? ENEMIES['湖'] : ['水鏡の幻', '揺らぐ影', '湖底の番人'];
     if (!isBoss) enemy = rand(lakeEnemies);
@@ -1563,6 +1601,7 @@ function triggerBattle(isBoss) {
         dungState.failed = true;
         dungState.inBattle = false;
         addLL('danger', '誰も立っていない。扉の向こうから、静かに戻ってきた…');
+        if (dungState.forestMode) { finishForestDungeon(false); return; }
         if (dungState.floorMode) { finishMirrorDungeon(false); return; }
         if (dungState.pendingFinish) finishDungeon();
         return;
@@ -1607,7 +1646,8 @@ function triggerBattle(isBoss) {
         var lastHitter = fighters[fighters.length-1];
         addLL('battle', enemy + 'を倒した！');
         // Talerドロップ（gierig装備で増える）
-        var tBase = dungState.floorMode ? (5 + Math.floor(mirrorState.floor * 1.5) + Math.floor(Math.random() * 8))
+        var tBase = dungState.forestMode ? (4 + Math.floor(forestState.schritt * 1.0) + Math.floor(Math.random() * 6))
+          : dungState.floorMode ? (5 + Math.floor(mirrorState.floor * 1.5) + Math.floor(Math.random() * 8))
           : (isDeepSea ? 15 + Math.floor(Math.random()*16)
           : (dungLayer === '海' ? 8 + Math.floor(Math.random()*9) : 4 + Math.floor(Math.random()*5)));
         var greed = 0;
@@ -1640,6 +1680,11 @@ function triggerBattle(isBoss) {
         dungState.inBattle = false;
         dungState.currentEnemy = null;
         renderLiveHP();
+        // 夜の森：戦闘後、進む/戻る判定に戻す
+        if (dungState.forestMode) {
+          setTimeout(onForestBattleClear, 700);
+          return;
+        }
         // フロアモードは次の階へ進む
         if (dungState.floorMode) {
           if (Math.random() < 0.55) triggerFloorItem();
@@ -1650,8 +1695,25 @@ function triggerBattle(isBoss) {
         return;
       }
 
+      // ── 予兆システム ──
+      // 階層が深いほど発生率UP、観測者出現中は強制発動
+      var omenChance = dungState.forestMode
+        ? Math.min(0.30, 0.07 + forestState.schritt * 0.006)
+        : dungState.floorMode
+        ? Math.min(0.35, 0.08 + mirrorState.floor * 0.005)
+        : (isDeepSea ? 0.15 : 0.08);
+      var omen = null;
+      if (Math.random() < omenChance) {
+        omen = OMENS[Math.floor(Math.random() * OMENS.length)];
+        addLL('danger', omen.text);
+      }
+
       // ── 敵の反撃 ──
-      var isAOE = (isDeepSea && Math.random() < 0.3) || (dungState.floorMode && mirrorState.floor >= 15 && Math.random() < 0.25);
+      var isAOE = (isDeepSea && Math.random() < 0.3)
+        || (dungState.floorMode && mirrorState.floor >= 15 && Math.random() < 0.25)
+        || (dungState.forestMode && forestState.schritt >= 18 && Math.random() < 0.2);
+      // 予兆「Risse」はAOEへの変化を強制する
+      if (omen && omen.key === 'risse') isAOE = true;
       if (isAOE) {
         // 全体攻撃
         addLL('danger', enemy + 'の全体攻撃！');
@@ -1677,37 +1739,69 @@ function triggerBattle(isBoss) {
         }
       } else {
         // 単体攻撃：SPDが低いほど狙われやすい重み付きランダム
-        // weight = max(1, maxSPD - SPD + 4) で最低SPDでも最高SPDの数倍程度に収まる
         var maxSpd = fighters.reduce(function(m,c){ return Math.max(m, c.stats.spd||0); }, 0);
         var pool = fighters.map(function(c) {
           var qfx = equipFx(c);
           var base = Math.max(1, maxSpd - (c.stats.spd||0) + 4);
-          // leise装備は重みを大幅に下げる（狙われにくい）
           var w = qfx.quiet ? Math.max(1, Math.floor(base * (1 - qfx.quiet))) : base;
           return { c: c, w: w };
         });
-        var totalW = pool.reduce(function(s,p){ return s+p.w; }, 0);
-        var roll = Math.random() * totalW;
-        var acc = 0;
-        var target = pool[pool.length-1].c;
-        for (var pi = 0; pi < pool.length; pi++) {
-          acc += pool[pi].w;
-          if (roll < acc) { target = pool[pi].c; break; }
+        var target;
+        // 予兆「Flüstern」は最もHPが低い仲間を強制ターゲットにする
+        if (omen && omen.key === 'fluestern') {
+          target = fighters.slice().sort(function(a,b){ return a.hp - b.hp; })[0];
+        } else {
+          var totalW = pool.reduce(function(s,p){ return s+p.w; }, 0);
+          var roll = Math.random() * totalW;
+          var acc = 0;
+          target = pool[pool.length-1].c;
+          for (var pi = 0; pi < pool.length; pi++) {
+            acc += pool[pi].w;
+            if (roll < acc) { target = pool[pi].c; break; }
+          }
         }
         var tfx = equipFx(target);
         var defMod = target.status === '仮加入' ? 0.9 : 1.0;
         if (target.layer === dungLayer) defMod *= 1.1;
-        if (tfx.dodge && Math.random() < tfx.dodge) {
+
+        // 予兆「Geisternebel」は回避不可＋固定ダメージを問答無用で与える
+        var nebelForced = omen && omen.key === 'nebel';
+        // 予兆「Schatten」は次の反撃そのものを行わない（敵が見えなくなる演出）
+        var schattenSkip = omen && omen.key === 'schatten';
+
+        if (schattenSkip) {
+          addLL('danger', 'Schatten（影）に紛れて、' + enemy + 'の姿が見えなくなった。');
+        } else if (!nebelForced && tfx.dodge && Math.random() < tfx.dodge) {
           addLL('battle', enemy + 'の攻撃。だが' + target.word + 'はひらりとかわした。');
         } else {
           var dmg = Math.max(2, enemyAtk - Math.floor(target.stats.def * defMod * 0.6) + Math.floor(Math.random()*8));
-          target.hp = Math.max(0, target.hp - dmg);
-          addLL('battle', enemy + 'の攻撃。' + target.word + 'は-' + dmg + 'HP（残り' + target.hp + '）');
+          if (nebelForced) {
+            var extraDmg = 6 + Math.floor(Math.random() * 6);
+            dmg += extraDmg;
+            target.hp = Math.max(0, target.hp - dmg);
+            addLL('danger', target.word + 'はGeisternebelに包み込まれ苦しい。-' + dmg + 'HP（残り' + target.hp + '）');
+          } else {
+            // 予兆「Kälte」発生中はATKデバフを一時的に適用済み（下のomenEffects側で処理）
+            target.hp = Math.max(0, target.hp - dmg);
+            addLL('battle', enemy + 'の攻撃。' + target.word + 'は-' + dmg + 'HP（残り' + target.hp + '）');
+          }
           if (tfx.reflect && dmg > 0) {
             var refDmg = Math.max(1, Math.floor(dmg * tfx.reflect));
             enemyHP = Math.max(0, enemyHP - refDmg);
             addLL('battle', target.word + 'の棘が' + refDmg + 'のダメージを返した。（敵残HP: ' + enemyHP + '）');
           }
+        }
+
+        // 予兆「Kälte」：次ターン全員のATKを一時低下（このターンの後、即時反映）
+        if (omen && omen.key === 'kaelte') {
+          fighters.forEach(function(c) {
+            if (!c._omenAtkDebuff) {
+              c._omenAtkDebuff = true;
+              c._omenOrigAtk = c.stats.atk;
+              c.stats.atk = Math.max(1, Math.floor(c.stats.atk * 0.8));
+            }
+          });
+          addLL('danger', 'Kälte（冷気）で身体が重い。次の攻撃力が落ちる。');
         }
       }
       renderLiveHP();
@@ -1722,6 +1816,7 @@ function triggerBattle(isBoss) {
         dungState.failed = true;
         dungState.inBattle = false;
         addLL('danger', '誰も立っていない。扉の向こうから、静かに戻ってきた…');
+        if (dungState.forestMode) { finishForestDungeon(false); return; }
         if (dungState.floorMode) { finishMirrorDungeon(false); return; }
         if (dungState.pendingFinish) finishDungeon();
         return;
@@ -1952,6 +2047,7 @@ function finishDungeon() {
   }
   dungState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
   removeStormDebuff(dungState.party);
+  removeOmenDebuff(dungState.party);
   dungState.active = false;
   G.lastBattleLog = dungState.battleLog.slice(); // 最新戦闘ログを保存
   if (typeof dungFx !== 'undefined') dungFx.stop();
@@ -2151,6 +2247,7 @@ function finishMirrorDungeon(success) {
   }
 
   mirrorState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
+  removeOmenDebuff(mirrorState.party);
   G.lastBattleLog = dungState.battleLog.slice();
   if (typeof dungFx !== 'undefined') dungFx.stop();
   renderLiveHP();
@@ -2163,10 +2260,417 @@ function finishMirrorDungeon(success) {
   lvQueue.forEach(function(e){ lvMap2[e.word] = e.level; });
   var lvDedupe2 = Object.keys(lvMap2).map(function(w){ return { word: w, level: lvMap2[w] }; });
   if (lvDedupe2.length > 0) {
-    setTimeout(function(){ startLevelUpQueue(lvDedupe2); }, 800);
+    setTimeout(function(){ startLevelUpQueue(lvDedupe2, function(){ showMirrorRoomIntroIfPending(); }); }, 800);
+  } else {
+    setTimeout(function(){ toast('探索完了！ログを確認しよう'); showMirrorRoomIntroIfPending(); }, 500);
+  }
+}
+
+function showMirrorRoomIntroIfPending() {
+  if (!window._pendingMirrorRoomIntro) return;
+  window._pendingMirrorRoomIntro = false;
+  setTimeout(function() {
+    showEventPopup({
+      icon: '🧜', title: '人魚の部屋を見つけた',
+      body: '湖の層に、扉が現れた。\n\nこれからは、湖の層をタップすると\nいつでもこの部屋に来られる。',
+      buttonLabel: '部屋を見にいく',
+      onClose: function() { openMirrorRoom(); }
+    });
+  }, 600);
+}
+
+// ══════════════════════════════════════════════
+//  夜の森（Schritt制：左/右/戻る）
+// ══════════════════════════════════════════════
+var FOREST_TOTAL_SCHRITT = 30;
+var FOREST_FIREFLY_SCHRITT = 5;
+
+var forestState = {
+  active: false,
+  schritt: 0,           // 現在の歩数（0=入口）
+  maxReached: 0,         // このセッションで到達した最大歩数
+  party: [],
+  sessionItems: [],
+  dung: null,
+  failed: false,
+  paused: false,
+  fireflyMisses: 0,      // 今回のクイズ失敗回数
+  fireflyDone: false,    // このセッションで蛍イベントが終わったか
+  swanDone: false,
+};
+
+var FOREST_FLAVOR = [
+  '木々の間から、月明かりが細く差し込んでいる。',
+  '落ち葉を踏む音が、思ったより大きく響く。',
+  '夜の森は、思ったより静かだ。静かすぎる。',
+  '遠くで、何かが動く音がした。',
+  '風が止んでいる。森全体が、息を潜めているようだ。',
+  '足元の土が、湿っている。誰かが、ここを通った跡だ。',
+];
+
+function startForestDungeon(party, dung) {
+  dungState.party = party;
+  dungState.dung = dung;
+  dungState.elapsed = 0;
+  dungState.duration = 999999;
+  dungState.failed = false;
+  dungState.inBattle = false;
+  dungState.pendingFinish = false;
+  dungState.herbUsed = false;
+  dungState.dropBoost = false;
+  dungState.active = true;
+  dungState.startedAt = Date.now();
+  dungState.battleLog = [];
+  dungState.sessionItems = [];
+  dungState.levelUps = [];
+  dungState.events = [];
+  dungState.floorMode = false;
+  dungState.forestMode = true;
+  if (dungState.interval) clearInterval(dungState.interval);
+
+  forestState.active = true;
+  forestState.schritt = 0;
+  forestState.maxReached = 0;
+  forestState.party = party;
+  forestState.sessionItems = [];
+  forestState.dung = dung;
+  forestState.failed = false;
+  forestState.paused = false;
+  forestState.fireflyMisses = 0;
+  forestState.fireflyDone = false;
+  forestState.swanDone = false;
+
+  document.getElementById('ll-title').textContent = '夜の森';
+  document.getElementById('ll-scroll').innerHTML = '';
+  document.getElementById('ll-timer').textContent = '0歩';
+  renderLiveHP();
+  addLL('normal', '夜だけ開く道に、足を踏み入れた。');
+  setTimeout(showForestChoice, 1200);
+}
+
+function showForestChoice() {
+  if (!forestState.active || forestState.failed) return;
+  forestState.paused = true;
+  var modal = document.getElementById('forest-choice-modal');
+  document.getElementById('forest-schritt-text').textContent = forestState.schritt + '歩目';
+  document.getElementById('forest-flavor-text').textContent =
+    forestState.schritt === 0 ? '森の入口に立っている。進むか、引き返すか。'
+    : FOREST_FLAVOR[Math.floor(Math.random() * FOREST_FLAVOR.length)];
+  modal.style.display = 'flex';
+}
+
+function forestChoose(dir) {
+  if (!forestState.active || forestState.failed) return;
+  document.getElementById('forest-choice-modal').style.display = 'none';
+  forestState.paused = false;
+
+  if (dir === 'back') {
+    if (forestState.schritt <= 0) {
+      // すでに入口：そのまま安全に帰還
+      finishForestDungeon(true);
+      return;
+    }
+    forestState.schritt--;
+    addLL('normal', '一歩、引き返した。（' + forestState.schritt + '歩目）');
+  } else {
+    forestState.schritt++;
+    if (forestState.schritt > forestState.maxReached) forestState.maxReached = forestState.schritt;
+    addLL('normal', (dir === 'left' ? '左の道へ進んだ。' : '右の道へ進んだ。') + '（' + forestState.schritt + '歩目）');
+  }
+
+  var timerEl = document.getElementById('ll-timer');
+  if (timerEl) timerEl.textContent = forestState.schritt + '歩';
+
+  // 戻って入口に到達 → 安全帰還
+  if (dir === 'back' && forestState.schritt <= 0) {
+    setTimeout(function(){ finishForestDungeon(true); }, 600);
+    return;
+  }
+
+  // 5歩目固定：蛍イベント
+  if (dir !== 'back' && forestState.schritt === FOREST_FIREFLY_SCHRITT && !forestState.fireflyDone) {
+    setTimeout(showFireflyEncounter, 800);
+    return;
+  }
+  // befriend後、5歩目通過時は1/5で再会
+  if (dir !== 'back' && forestState.schritt === FOREST_FIREFLY_SCHRITT && forestState.fireflyDone) {
+    if (hasPartnerType('gluehwuermchen') && Math.random() < 0.2) {
+      setTimeout(function(){
+        addLL('item', '川のほとりで、Glühwürmchenが優しく光った。');
+        triggerForestItem();
+        setTimeout(runNextForestSchritt, 1000);
+      }, 700);
+      return;
+    }
+  }
+
+  // 最終歩：白鳥イベント
+  if (dir !== 'back' && forestState.schritt >= FOREST_TOTAL_SCHRITT && !forestState.swanDone) {
+    setTimeout(showSwanEncounter, 800);
+    return;
+  }
+
+  // 通常進行：戦闘判定へ
+  setTimeout(runNextForestSchritt, 700);
+}
+
+function runNextForestSchritt() {
+  if (!forestState.active || forestState.failed) return;
+  // 進むも戻るも同じ確率で遭遇（70%）
+  if (Math.random() < 0.7) {
+    triggerBattle(false);
+  } else {
+    addLL('normal', '何も起きなかった。');
+    setTimeout(showForestChoice, 900);
+  }
+}
+
+function onForestBattleClear() {
+  if (!forestState.active || forestState.failed) return;
+  if (Math.random() < 0.4) triggerForestItem();
+  setTimeout(showForestChoice, 700);
+}
+
+function triggerForestItem() {
+  var pool = DROPS['庭'];
+  if (!pool || !pool.length) return;
+  var alive = forestState.party.filter(function(c){ return c.hp > 0; });
+  var finder = alive.length ? alive[0] : forestState.party[0];
+  var item = Object.assign({}, weightedRand(pool));
+  if (item.type === '生成装備') {
+    item = genEquip(0, finder && finder.stats ? finder.stats.lck : 0);
+  }
+  addLL('item', finder.word + 'が ' + item.icon + '「' + item.name + '」を見つけた。');
+  var existing = G.inventory.find(function(i){ return i.name === item.name; });
+  if (existing) existing.qty = (existing.qty || 1) + 1;
+  else { item.qty = 1; G.inventory.push(item); }
+  forestState.sessionItems.push(item.name);
+  dungState.sessionItems.push(item.name);
+}
+
+// ── 蛍とのbefriend冠詞クイズ ──
+function showFireflyEncounter() {
+  forestState.paused = true;
+  forestState.fireflyMisses = 0;
+  addLL('normal', '小さな川のほとりに出た。水音が、やさしく響いている。');
+  setTimeout(showFireflyQuiz, 900);
+}
+
+function showFireflyQuiz() {
+  var modal = document.getElementById('firefly-quiz-modal');
+  document.getElementById('firefly-quiz-body').textContent =
+    forestState.fireflyMisses === 0
+      ? '水面の上を、小さな光がひとつ漂っている。Glühwürmchenだ。'
+      : 'もう一度、光がこちらを見ている気がする。';
+  var choicesEl = document.getElementById('firefly-quiz-choices');
+  var options = ['der', 'die', 'das'].sort(function(){ return Math.random()-0.5; });
+  choicesEl.innerHTML = options.map(function(a) {
+    return '<button class="firefly-choice-btn" data-a="' + a + '" style="flex:1;background:#21134a;border:1px solid #5a3a8a;border-radius:12px;padding:11px 6px;color:#d8c0f8;font-size:14px;cursor:pointer;font-family:Georgia,serif">' + a + '</button>';
+  }).join('');
+  choicesEl.querySelectorAll('.firefly-choice-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { answerFireflyQuiz(this.getAttribute('data-a')); });
+  });
+  modal.style.display = 'flex';
+}
+
+function answerFireflyQuiz(answer) {
+  var modal = document.getElementById('firefly-quiz-modal');
+  if (answer === 'das') {
+    modal.style.display = 'none';
+    forestState.fireflyDone = true;
+    addPartner('gluehwuermchen');
+    addLL('success', 'das Glühwürmchen——光が、そっと手のひらに乗った。仲間になった。');
+    saveGame();
+    setTimeout(function() {
+      showEventPopup({
+        icon: '✨', title: 'Glühwürmchen befriended',
+        body: 'das Glühwürmchen（蛍）が、パートナーになった。\n\n仲間一覧から、誰かのパートナーとして\n編成することができる。',
+        buttonLabel: '嬉しい',
+        onClose: function() { setTimeout(runNextForestSchritt, 500); }
+      });
+    }, 600);
+  } else {
+    forestState.fireflyMisses++;
+    if (forestState.fireflyMisses >= 2) {
+      modal.style.display = 'none';
+      addLL('danger', '光は、すっと水の中に消えてしまった。');
+      forestState.fireflyDone = true; // 今回は終わり（次回まで会えない扱い）
+      setTimeout(runNextForestSchritt, 800);
+    } else {
+      toast('違う……もう一度。');
+      setTimeout(showFireflyQuiz, 500);
+    }
+  }
+}
+
+// ── 白鳥と水底からの手 ──
+function showSwanEncounter() {
+  forestState.paused = true;
+  addLL('danger', '森の最も奥、月明かりに照らされた池がある。');
+  setTimeout(function() {
+    var modal = document.getElementById('swan-intro-modal');
+    document.getElementById('swan-intro-text').textContent =
+      '白い鳥が一羽、静かに水面に浮かんでいる。\n\nその下で、水底から伸びる影の手が、\nゆっくりと近づいていく。';
+    modal.style.display = 'flex';
+  }, 900);
+}
+
+function startSwanBattle() {
+  document.getElementById('swan-intro-modal').style.display = 'none';
+  addLL('danger', '助けに、水の中へ踏み込んだ。');
+  setTimeout(function(){ triggerBattle(true); }, 800);
+}
+
+// ── 帰還処理 ──
+function finishForestDungeon(success) {
+  forestState.active = false;
+  forestState.paused = false;
+  dungState.forestMode = false;
+  dungState.active = false;
+  document.getElementById('forest-choice-modal').style.display = 'none';
+
+  var allNames = forestState.party.map(function(c){ return c.word; }).join('・');
+  var survived = forestState.party.filter(function(c){ return c.hp > 0; });
+  var reachedSchritt = forestState.maxReached;
+
+  if (!success || !survived.length) {
+    var lost = forestState.sessionItems || [];
+    lost.forEach(function(name) {
+      var inv = G.inventory.find(function(i){ return i.name === name; });
+      if (inv) {
+        inv.qty = (inv.qty || 1) - 1;
+        if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
+      }
+    });
+    addLL('danger', allNames + 'は倒れ、森の入口で目を覚ました…');
+    if (lost.length) addLL('danger', '持ち帰るはずだった荷物は、森に消えた。');
+    G.logs.unshift({ time: now(), text: allNames + 'は夜の森 ' + reachedSchritt + '歩目で力尽きた。' });
+  } else {
+    var survivedNames = survived.map(function(c){ return c.word; }).join('・');
+    var cleared = forestState.schritt >= FOREST_TOTAL_SCHRITT || forestState.swanDone;
+    addLL('success', survivedNames + 'は夜の森を抜けて、無事に帰還した。');
+    addLL('normal', '到達: ' + reachedSchritt + '歩目' + (cleared ? '　（最深部到達）' : ''));
+    G.logs.unshift({ time: now(), text: survivedNames + 'が夜の森 ' + reachedSchritt + '歩目から帰還した。' });
+    if (cleared && G.clearedDungeons.indexOf('夜の森') < 0) {
+      G.clearedDungeons.push('夜の森');
+      G.bottleLimit = (G.bottleLimit || 6) + 3;
+      toast('新しい瓶が流れ着くようになった。（上限+3）');
+      addPartner('schwan');
+      setTimeout(function() {
+        showEventPopup({
+          icon: '🦢', title: 'Schwan befriended',
+          body: '助け出した白鳥——der Schwanが、\nパートナーになった。\n\n仲間一覧から、誰かのパートナーとして\n編成することができる。',
+          buttonLabel: '良かった',
+        });
+      }, 1000);
+    }
+  }
+
+  forestState.party.forEach(function(c){ c.hp = c.maxHP; c.inDungeon = false; });
+  removeOmenDebuff(forestState.party);
+  G.lastBattleLog = dungState.battleLog.slice();
+  if (typeof dungFx !== 'undefined') dungFx.stop();
+  renderLiveHP();
+  saveGame();
+  checkPlayerLevel();
+
+  var lvQueue = (dungState.levelUps || []).slice();
+  dungState.levelUps = [];
+  var lvMap = {};
+  lvQueue.forEach(function(e){ lvMap[e.word] = e.level; });
+  var lvDedupe = Object.keys(lvMap).map(function(w){ return { word: w, level: lvMap[w] }; });
+  if (lvDedupe.length > 0) {
+    setTimeout(function(){ startLevelUpQueue(lvDedupe); }, 800);
   } else {
     setTimeout(function(){ toast('探索完了！ログを確認しよう'); }, 500);
   }
+}
+
+// ══════════════════════════════════════════════
+//  パートナーシステム（蛍・白鳥）
+// ══════════════════════════════════════════════
+// G.partners = [{ id, type:'gluehwuermchen'|'schwan', boundTo: word|null }]
+
+function addPartner(type) {
+  if (!G.partners) G.partners = [];
+  var id = type + '_' + Date.now();
+  G.partners.push({ id: id, type: type, boundTo: null });
+  saveGame();
+}
+
+function hasPartnerType(type) {
+  return !!(G.partners || []).find(function(p){ return p.type === type; });
+}
+
+var PARTNER_INFO = {
+  gluehwuermchen: { name: 'Glühwürmchen', icon: '✨', desc: '蛍。深いところで何かを見つけやすくしてくれる（効果未実装）' },
+  schwan:         { name: 'Schwan', icon: '🦢', desc: '白鳥。静かな水辺で、何かを教えてくれる（効果未実装）' },
+};
+
+// 仲間1体に対してパートナーを紐付け（1体1パートナーまで）
+function bindPartnerToCompanion(partnerId, companionWord) {
+  if (!G.partners) return;
+  var partner = G.partners.find(function(p){ return p.id === partnerId; });
+  if (!partner) return;
+  // 既にそのパートナーが他の仲間に紐づいていれば解除
+  // companionWord が null なら紐付け解除のみ
+  if (companionWord) {
+    // 対象の仲間に既についている別のパートナーがあれば外す
+    G.partners.forEach(function(p) {
+      if (p.boundTo === companionWord && p.id !== partnerId) p.boundTo = null;
+    });
+  }
+  partner.boundTo = companionWord;
+  saveGame();
+}
+
+// 仲間カードに表示する、紐づいているパートナーの小さなバッジ＋管理ボタン
+function renderPartnerBadge(c, cIdx) {
+  if (!G.partners || !G.partners.length) return '';
+  var bound = G.partners.find(function(p){ return p.boundTo === c.word; });
+  var info = bound ? PARTNER_INFO[bound.type] : null;
+  return '<div style="margin-top:5px;display:flex;align-items:center;gap:6px">'
+    + (info ? '<span style="font-size:11px;color:#6b5e4e">' + info.icon + ' ' + info.name + '</span>' : '<span style="font-size:10px;color:#b0a090;font-style:italic">パートナーなし</span>')
+    + '<button class="partner-mgr-btn" data-word="' + c.word + '" style="font-size:10px;padding:2px 9px;border:1px solid #c8b89a;border-radius:10px;background:#f5f0e8;cursor:pointer;font-family:Georgia,serif;color:#6b5e4e">パートナーを管理</button>'
+    + '</div>';
+}
+
+// パートナー選択モーダル（仲間カード picker を流用）
+function openPartnerPicker(companionWord) {
+  if (!G.partners || !G.partners.length) { toast('まだパートナーがいません。夜の森で出会おう。'); return; }
+  var modal = document.getElementById('comp-picker-modal');
+  var list  = document.getElementById('comp-picker-list');
+  document.getElementById('comp-picker-title').textContent = 'パートナーを選ぶ';
+  var sortBar = document.getElementById('party-sort-bar');
+  if (sortBar) sortBar.remove();
+
+  var rows = [{ id: null, type: null }].concat(G.partners);
+  list.innerHTML = rows.map(function(p) {
+    if (!p.id) return '<div class="picker-row" data-mode="partner" data-pid="" style="color:#9a8a7a;font-style:italic">— 外す（パートナーなし）</div>';
+    var info = PARTNER_INFO[p.type];
+    var boundElsewhere = p.boundTo && p.boundTo !== companionWord;
+    return '<div class="picker-row" data-mode="partner" data-pid="' + p.id + '">'
+      + '<span style="font-size:24px;margin-right:4px">' + info.icon + '</span>'
+      + '<div style="flex:1"><div style="font-size:14px;color:#2c2416;font-weight:600">' + info.name + '</div>'
+      + '<div style="font-size:10px;color:#6b5e4e">' + info.desc + (boundElsewhere ? '　— 現在「' + p.boundTo + '」と一緒' : '') + '</div>'
+      + '</div></div>';
+  }).join('');
+
+  list.querySelectorAll('.picker-row[data-mode="partner"]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var pid = this.getAttribute('data-pid') || null;
+      if (pid) {
+        bindPartnerToCompanion(pid, companionWord);
+      } else {
+        // 外す：現在companionWordに紐づくパートナーを探して解除
+        var current = G.partners.find(function(p){ return p.boundTo === companionWord; });
+        if (current) bindPartnerToCompanion(current.id, null);
+      }
+      closeCompPicker();
+      renderCompanions();
+    });
+  });
+  modal.style.display = 'flex';
 }
 
 // ── INVENTORY ──
@@ -2177,7 +2681,8 @@ function renderInventory() {
     return;
   }
   el.innerHTML = G.inventory.map(function(item, idx) {
-    return '<div class="inv-card" data-idx="' + idx + '">'
+    return '<div class="inv-card" data-idx="' + idx + '" style="position:relative">'
+      + '<div class="inv-del-btn" data-del-idx="' + idx + '" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.06);color:#9a8a7a;font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1">×</div>'
       + '<div class="inv-icon">' + item.icon + '</div>'
       + '<div class="inv-name">' + item.name + '</div>'
       + '<div class="inv-type">' + item.type + '</div>'
@@ -2186,13 +2691,69 @@ function renderInventory() {
       + '</div>';
   }).join('');
   document.querySelectorAll('.inv-card').forEach(function(card) {
-    card.addEventListener('click', function() {
+    card.addEventListener('click', function(e) {
+      if (e.target.classList.contains('inv-del-btn')) return;
       var idx = parseInt(this.getAttribute('data-idx'));
       useItem(G.inventory[idx]);
     });
   });
+  document.querySelectorAll('.inv-del-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var idx = parseInt(this.getAttribute('data-del-idx'));
+      confirmDeleteItem(idx);
+    });
+  });
   // 進化石錬成エリア
   renderCraftArea();
+}
+
+function confirmDeleteItem(idx) {
+  var item = G.inventory[idx];
+  if (!item) return;
+  showConfirmModal({
+    icon: '🗑️',
+    title: '削除しますか？',
+    body: item.icon + ' ' + item.name + (item.qty > 1 ? '　×' + item.qty : '') + '\n\n本当に削除しますか？\nこの操作は取り消せません。',
+    confirmLabel: '削除する',
+    cancelLabel: 'やめる',
+    onConfirm: function() {
+      var realIdx = G.inventory.indexOf(item);
+      if (realIdx >= 0) G.inventory.splice(realIdx, 1);
+      saveGame();
+      toast(item.name + 'を削除しました');
+      renderInventory();
+    }
+  });
+}
+
+// ── 汎用2択確認モーダル（削除など取り消し不可な操作向け） ──
+function showConfirmModal(config) {
+  var existing = document.getElementById('confirm-modal-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'confirm-modal-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(20,10,10,0.6);z-index:800;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML =
+    '<div style="background:#f5f0e8;border-radius:18px;width:88%;max-width:300px;padding:24px 20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,0.25)">'
+    + '<div style="font-size:30px;margin-bottom:8px">' + (config.icon || '⚠️') + '</div>'
+    + '<div style="font-size:15px;color:#2c2416;font-weight:600;margin-bottom:10px">' + (config.title || '') + '</div>'
+    + '<div style="font-size:12px;color:#4a3c2e;line-height:1.8;margin-bottom:20px">' + (config.body || '').replace(/\n/g, '<br>') + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button id="confirm-modal-cancel" style="flex:1;background:#fff;border:1px solid #c8b89a;border-radius:14px;padding:10px;font-size:13px;color:#6b5e4e;cursor:pointer;font-family:Georgia,serif">' + (config.cancelLabel || 'やめる') + '</button>'
+    + '<button id="confirm-modal-ok" style="flex:1;background:#a04040;border:none;border-radius:14px;padding:10px;font-size:13px;color:#fff;cursor:pointer;font-family:Georgia,serif">' + (config.confirmLabel || '実行する') + '</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+
+  document.getElementById('confirm-modal-cancel').addEventListener('click', function() {
+    overlay.remove();
+    if (typeof config.onCancel === 'function') config.onCancel();
+  });
+  document.getElementById('confirm-modal-ok').addEventListener('click', function() {
+    overlay.remove();
+    if (typeof config.onConfirm === 'function') config.onConfirm();
+  });
 }
 
 function renderCraftArea() {
@@ -3242,6 +3803,17 @@ function removeStormDebuff(party) {
   });
 }
 
+// 予兆「Kälte」によるATKデバフを解除（ダンジョン帰還時に必ず呼ぶ）
+function removeOmenDebuff(party) {
+  party.forEach(function(c) {
+    if (c._omenAtkDebuff) {
+      c.stats.atk = c._omenOrigAtk;
+      delete c._omenAtkDebuff;
+      delete c._omenOrigAtk;
+    }
+  });
+}
+
 // ── SAVE / LOAD ──
 var SAVE_KEY = 'traumkuste_save';
 
@@ -3272,6 +3844,7 @@ function saveGame() {
       stormCleared: G.stormCleared || {},
       apartmentUnlocked: G.apartmentUnlocked || false,
       rooms: G.rooms || [],
+      partners: G.partners || [],
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -3315,6 +3888,7 @@ function loadGame() {
     G.stormCleared = data.stormCleared || {};
     G.apartmentUnlocked = data.apartmentUnlocked || false;
     G.rooms = data.rooms || [];
+    G.partners = data.partners || [];
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
@@ -3982,10 +4556,14 @@ function giveGift(roomIdx, itemName) {
 }
 
 function openResidentPicker(roomIdx) {
+  // 既に他の部屋に住んでいる仲間は除外
+  var occupiedNames = (G.rooms || [])
+    .map(function(r, i){ return i !== roomIdx ? r.resident : null; })
+    .filter(Boolean);
   var avail = G.companions.filter(function(c){
-    return c.status === '正式加入';
+    return c.status === '正式加入' && occupiedNames.indexOf(c.word) < 0;
   });
-  if (!avail.length) { toast('正式加入の仲間がいません'); return; }
+  if (!avail.length) { toast('住める仲間がいません（正式加入の仲間が他の部屋に住んでいるか不足しています）'); return; }
 
   var modal = document.getElementById('comp-picker-modal');
   var list  = document.getElementById('comp-picker-list');
@@ -4371,8 +4949,11 @@ var dungFx = (function() {
 // ──────────────────────────────────────────────
 var _lvQueue = [];
 
-function startLevelUpQueue(queue) {
+var _lvQueueOnComplete = null;
+
+function startLevelUpQueue(queue, onComplete) {
   _lvQueue = queue || [];
+  _lvQueueOnComplete = onComplete || null;
   showNextLevelUpPopup();
 }
 
@@ -4380,6 +4961,7 @@ function showNextLevelUpPopup() {
   if (!_lvQueue.length) {
     // キューが空になったらトースト
     toast('探索完了！ログを確認しよう');
+    if (_lvQueueOnComplete) { var cb = _lvQueueOnComplete; _lvQueueOnComplete = null; cb(); }
     return;
   }
   var entry = _lvQueue.shift(); // { word, level }
@@ -4606,9 +5188,10 @@ function showMirrorEndingModal() {
       G.mirrorRoomUnlocked = true;
       G.logs.unshift({ time: now(), text: '水鏡の路の最奥で、人魚の部屋を見つけた。種を庭に植えた。' });
       saveGame();
-      toast('湖の層に、扉が現れた。');
       // 帰還処理（ミラーダンジョン終了）
       finishMirrorDungeon(true);
+      // 人魚の部屋への導線を明示するポップアップ（レベルアップ表示の後に出す）
+      window._pendingMirrorRoomIntro = true;
     });
   });
 }
