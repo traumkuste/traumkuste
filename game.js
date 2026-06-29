@@ -1527,9 +1527,15 @@ function triggerBattle(isBoss) {
     var s = forestState.schritt;
     var gardenEnemies = (ENEMIES['庭'] && ENEMIES['庭'].length) ? ENEMIES['庭'] : ['夜の蛾', '茂みの影', '木霊'];
     if (!isBoss) enemy = rand(gardenEnemies);
-    enemyAtk = Math.floor(7 + s * 1.4) + Math.floor(Math.random() * 6);
-    enemyDef = Math.floor(4 + s * 0.9) + Math.floor(Math.random() * 4);
-    enemyHP  = Math.floor(55 + s * 12) + Math.floor(Math.random() * Math.max(15, s * 5));
+    enemyAtk = Math.floor(10 + s * 2.6) + Math.floor(Math.random() * 8);
+    enemyDef = Math.floor(6 + s * 1.6) + Math.floor(Math.random() * 5);
+    enemyHP  = Math.floor(70 + s * 26) + Math.floor(Math.random() * Math.max(20, s * 9));
+    // ボス（白鳥救出戦）はさらに大幅強化
+    if (isBoss) {
+      enemyAtk = Math.floor(enemyAtk * 1.8);
+      enemyDef = Math.floor(enemyDef * 1.6);
+      enemyHP  = Math.floor(enemyHP * 2.2);
+    }
   } else if (dungState.floorMode) {
     var f = mirrorState.floor;
     var lakeEnemies = (ENEMIES['湖'] && ENEMIES['湖'].length) ? ENEMIES['湖'] : ['水鏡の幻', '揺らぐ影', '湖底の番人'];
@@ -2297,6 +2303,7 @@ var forestState = {
   fireflyMisses: 0,      // 今回のクイズ失敗回数
   fireflyDone: false,    // このセッションで蛍イベントが終わったか
   swanDone: false,
+  inSwanBattle: false,   // 白鳥救出戦の最中かどうか
 };
 
 var FOREST_FLAVOR = [
@@ -2339,6 +2346,7 @@ function startForestDungeon(party, dung) {
   forestState.fireflyMisses = 0;
   forestState.fireflyDone = false;
   forestState.swanDone = false;
+  forestState.inSwanBattle = false;
 
   document.getElementById('ll-title').textContent = '夜の森';
   document.getElementById('ll-scroll').innerHTML = '';
@@ -2427,6 +2435,13 @@ function runNextForestSchritt() {
 
 function onForestBattleClear() {
   if (!forestState.active || forestState.failed) return;
+  if (forestState.inSwanBattle) {
+    forestState.inSwanBattle = false;
+    forestState.swanDone = true;
+    addLL('success', '影の手は、水の底へ沈んでいった。白鳥は静かに羽を休めている。');
+    setTimeout(function(){ finishForestDungeon(true); }, 1200);
+    return;
+  }
   if (Math.random() < 0.4) triggerForestItem();
   setTimeout(showForestChoice, 700);
 }
@@ -2518,6 +2533,7 @@ function showSwanEncounter() {
 function startSwanBattle() {
   document.getElementById('swan-intro-modal').style.display = 'none';
   addLL('danger', '助けに、水の中へ踏み込んだ。');
+  forestState.inSwanBattle = true;
   setTimeout(function(){ triggerBattle(true); }, 800);
 }
 
