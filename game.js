@@ -1010,10 +1010,54 @@ function promoteFull(w) {
 }
 
 // ── COMPANIONS ──
+var compSortKey = 'level';
+var LAYER_ORDER_COMP = ['浜辺', '海', '深海', '湖', '庭', '空中都市'];
+
 function renderCompanions() {
   var el = document.getElementById('comp-list');
   if (!G.companions.length) { el.innerHTML = '<p class="empty-msg">まだ仲間がいません。<br>言葉を覚えると出会えます。</p>'; return; }
-  el.innerHTML = G.companions.map(function(c, idx) {
+
+  // ソートバー
+  var sortBar = document.getElementById('comp-sort-bar');
+  if (!sortBar) {
+    sortBar = document.createElement('div');
+    sortBar.id = 'comp-sort-bar';
+    sortBar.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap';
+    el.parentElement.insertBefore(sortBar, el);
+  }
+  sortBar.innerHTML = [
+    {key:'level', label:'Lv'},
+    {key:'atk',   label:'⚔️ATK'},
+    {key:'lck',   label:'🍀LCK'},
+    {key:'layer', label:'層'},
+  ].map(function(s) {
+    var active = s.key === compSortKey;
+    return '<button data-sort="' + s.key + '" style="'
+      + 'padding:4px 10px;border-radius:12px;border:1px solid #c8b89a;'
+      + 'background:' + (active ? '#2c2416' : '#fff') + ';'
+      + 'color:' + (active ? '#f5f0e8' : '#6b5e4e') + ';'
+      + 'font-size:11px;cursor:pointer;font-family:Georgia,serif">'
+      + s.label + '</button>';
+  }).join('');
+  sortBar.querySelectorAll('button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      compSortKey = this.getAttribute('data-sort');
+      renderCompanions();
+    });
+  });
+
+  // ソート対象は元のインデックスを保持したまま並べ替える
+  var withIdx = G.companions.map(function(c, idx){ return { c: c, idx: idx }; });
+  withIdx.sort(function(a, b) {
+    if (compSortKey === 'level') return b.c.level - a.c.level;
+    if (compSortKey === 'atk')   return b.c.stats.atk - a.c.stats.atk;
+    if (compSortKey === 'lck')   return b.c.stats.lck - a.c.stats.lck;
+    if (compSortKey === 'layer') return LAYER_ORDER_COMP.indexOf(a.c.layer) - LAYER_ORDER_COMP.indexOf(b.c.layer);
+    return 0;
+  });
+
+  el.innerHTML = withIdx.map(function(entry) {
+    var c = entry.c, idx = entry.idx;
     var prov = c.status === '仮加入';
     var hpPct = Math.round(c.hp / c.maxHP * 100);
     var xpPct = Math.round((c.xp % XP_PER_LEVEL) / XP_PER_LEVEL * 100);
@@ -1301,20 +1345,21 @@ function openPartyPicker(slotIdx) {
     list.parentElement.insertBefore(sortBar, list);
   }
   var currentSort = 'level';
+  var LAYER_ORDER = ['浜辺', '海', '深海', '湖', '庭', '空中都市'];
   function renderSortedList(sortKey) {
     currentSort = sortKey;
     var sorted = avail.slice().sort(function(a, b) {
       if (sortKey === 'level') return b.level - a.level;
       if (sortKey === 'atk')   return b.stats.atk - a.stats.atk;
-      if (sortKey === 'def')   return b.stats.def - a.stats.def;
       if (sortKey === 'lck')   return b.stats.lck - a.stats.lck;
+      if (sortKey === 'layer') return LAYER_ORDER.indexOf(a.layer) - LAYER_ORDER.indexOf(b.layer);
       return 0;
     });
     sortBar.innerHTML = [
       {key:'level', label:'Lv'},
       {key:'atk',   label:'⚔️ATK'},
-      {key:'def',   label:'🛡️DEF'},
       {key:'lck',   label:'🍀LCK'},
+      {key:'layer', label:'層'},
     ].map(function(s) {
       var active = s.key === sortKey;
       return '<button data-sort="' + s.key + '" style="'
@@ -1527,7 +1572,7 @@ function triggerBattle(isBoss) {
     var s = forestState.schritt;
     var gardenEnemies = (ENEMIES['庭'] && ENEMIES['庭'].length) ? ENEMIES['庭'] : ['夜の蛾', '茂みの影', '木霊'];
     if (!isBoss) enemy = rand(gardenEnemies);
-    enemyAtk = Math.floor(45 + s * 3.2) + Math.floor(Math.random() * 14);
+    enemyAtk = Math.floor(220 + s * 9) + Math.floor(Math.random() * 24);
     enemyDef = Math.floor(28 + s * 2.0) + Math.floor(Math.random() * 9);
     enemyHP  = Math.floor(480 + s * 30) + Math.floor(Math.random() * Math.max(40, s * 11));
     // ボス（白鳥救出戦）はさらに大幅強化
@@ -1540,7 +1585,7 @@ function triggerBattle(isBoss) {
     var f = mirrorState.floor;
     var lakeEnemies = (ENEMIES['湖'] && ENEMIES['湖'].length) ? ENEMIES['湖'] : ['水鏡の幻', '揺らぐ影', '湖底の番人'];
     if (!isBoss) enemy = rand(lakeEnemies);
-    enemyAtk = Math.floor(8 + f * 2.2) + Math.floor(Math.random() * 6);
+    enemyAtk = Math.floor(160 + f * 11) + Math.floor(Math.random() * 20);
     enemyDef = Math.floor(4 + f * 1.3) + Math.floor(Math.random() * 4);
     enemyHP  = Math.floor(70 + f * 22) + Math.floor(Math.random() * Math.max(20, f * 8));
   } else if (dungLayer === '浜辺') {
@@ -2395,21 +2440,10 @@ function forestChoose(dir) {
     return;
   }
 
-  // 5歩目固定：蛍イベント
-  if (dir !== 'back' && forestState.schritt === FOREST_FIREFLY_SCHRITT && !forestState.fireflyDone) {
+  // 5歩目固定：蛍イベント（一度befriendしたら二度と出会わない）
+  if (dir !== 'back' && forestState.schritt === FOREST_FIREFLY_SCHRITT && !forestState.fireflyDone && !hasPartnerType('gluehwuermchen')) {
     setTimeout(showFireflyEncounter, 800);
     return;
-  }
-  // befriend後、5歩目通過時は1/5で再会
-  if (dir !== 'back' && forestState.schritt === FOREST_FIREFLY_SCHRITT && forestState.fireflyDone) {
-    if (hasPartnerType('gluehwuermchen') && Math.random() < 0.2) {
-      setTimeout(function(){
-        addLL('item', '川のほとりで、Glühwürmchenが優しく光った。');
-        triggerForestItem();
-        setTimeout(runNextForestSchritt, 1000);
-      }, 700);
-      return;
-    }
   }
 
   // 最終歩：白鳥イベント
