@@ -62,6 +62,7 @@ var G = {
   apartmentUnlocked: false,
   rooms: [],
   partners: [],  // [{ id:0, unlocked:true, resident: 'Wort' or null, wallpaper:'stripe' }]
+  schneckeUnlocked: false,
 };
 // ── UTILS ──
 function toast(msg) {
@@ -2857,6 +2858,189 @@ function renderCraftArea() {
 
   // 設計図クラフトセクション
   renderBlueprintCraftArea(container);
+
+  // Schnecke（リサイクル・装備強化）セクション
+  renderSchneckeArea(container);
+}
+
+// ══════════════════════════════════════════════
+//  Schnecke（リサイクル・装備強化システム）
+// ══════════════════════════════════════════════
+var SCHROTT_NAME = 'Schrott（がらくた）';
+
+function renderSchneckeArea(container) {
+  var existing = document.getElementById('schnecke-area');
+  if (existing) existing.remove();
+  if (!G.schneckeUnlocked) return;
+
+  var div = document.createElement('div');
+  div.id = 'schnecke-area';
+  div.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid #5a3a8a';
+
+  var schrottItem = G.inventory.find(function(i){ return i.name === SCHROTT_NAME; });
+  var schrottQty = schrottItem ? (schrottItem.qty || 1) : 0;
+
+  div.innerHTML = '<div style="font-size:12px;color:#7a5aa8;letter-spacing:1px;margin-bottom:10px">🐌 Schnecke — 「……要らないもの、ある？」</div>'
+    + '<div style="background:#1a0e30;border:1px solid #5a3a8a;border-radius:10px;padding:12px 13px;margin-bottom:8px;cursor:pointer" id="schnecke-recycle-btn">'
+    + '<div style="display:flex;align-items:center;gap:10px">'
+    + '<span style="font-size:22px">♻️</span>'
+    + '<div style="flex:1"><div style="font-size:13px;color:#d8c0f0;font-weight:600">不要なアイテムをリサイクルする</div>'
+    + '<div style="font-size:10px;color:#9888c0">アイテムを渡すと、Schrottに変えてくれる</div></div>'
+    + '<div style="font-size:11px;color:#a888d8">渡す</div>'
+    + '</div></div>'
+    + '<div style="background:#1a0e30;border:1px solid #5a3a8a;border-radius:10px;padding:12px 13px;cursor:pointer" id="schnecke-upgrade-btn">'
+    + '<div style="display:flex;align-items:center;gap:10px">'
+    + '<span style="font-size:22px">🔧</span>'
+    + '<div style="flex:1"><div style="font-size:13px;color:#d8c0f0;font-weight:600">装備を強化する</div>'
+    + '<div style="font-size:10px;color:#9888c0">Schrott×10 → 成功率80% • 所持: ' + schrottQty + '個</div></div>'
+    + '<div style="font-size:11px;color:#a888d8">強化する</div>'
+    + '</div></div>';
+
+  container.appendChild(div);
+
+  document.getElementById('schnecke-recycle-btn').addEventListener('click', openRecyclePicker);
+  document.getElementById('schnecke-upgrade-btn').addEventListener('click', openUpgradePicker);
+}
+
+// ── リサイクル：不要アイテムをSchrottに変換 ──
+function openRecyclePicker() {
+  var recyclable = G.inventory.filter(function(i) {
+    return i.name !== SCHROTT_NAME && i.type !== '設計図';
+  });
+  if (!recyclable.length) { toast('渡せるアイテムがありません'); return; }
+
+  var modal = document.getElementById('comp-picker-modal');
+  var list  = document.getElementById('comp-picker-list');
+  document.getElementById('comp-picker-title').textContent = 'Schneckeに渡すアイテムを選ぶ';
+  var sortBar = document.getElementById('party-sort-bar');
+  if (sortBar) sortBar.remove();
+
+  list.innerHTML = recyclable.map(function(item) {
+    return '<div class="picker-row" data-recycle-name="' + item.name + '">'
+      + '<span style="font-size:22px;margin-right:4px">' + item.icon + '</span>'
+      + '<div style="flex:1"><div style="font-size:14px;color:#2c2416;font-weight:600">' + item.name + '</div>'
+      + '<div style="font-size:10px;color:#6b5e4e">×' + (item.qty||1) + '</div></div>'
+      + '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-recycle-name]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var name = this.getAttribute('data-recycle-name');
+      closeCompPicker();
+      recycleItem(name);
+    });
+  });
+  modal.style.display = 'flex';
+}
+
+function recycleItem(name) {
+  var inv = G.inventory.find(function(i){ return i.name === name; });
+  if (!inv) return;
+  inv.qty = (inv.qty || 1) - 1;
+  if (inv.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== name; });
+
+  var gain = 1 + Math.floor(Math.random() * 3); // 1〜3個
+  var schrott = G.inventory.find(function(i){ return i.name === SCHROTT_NAME; });
+  if (schrott) schrott.qty = (schrott.qty || 1) + gain;
+  else G.inventory.push({ name: SCHROTT_NAME, type: '素材', icon: '🔩', desc: 'Schneckeが何かを変えてくれたもの。装備の強化に使える。', qty: gain });
+
+  saveGame();
+  toast('Schneckeは' + name + 'を受け取り、Schrott×' + gain + 'を渡してきた。');
+  renderInventory();
+}
+
+// ── 装備強化：仲間を選ぶ→装備を選ぶ→確認→成功率80% ──
+function openUpgradePicker() {
+  var schrott = G.inventory.find(function(i){ return i.name === SCHROTT_NAME; });
+  var schrottQty = schrott ? (schrott.qty || 1) : 0;
+  if (schrottQty < 10) { toast('Schrottが足りません（10個必要、所持: ' + schrottQty + '個）'); return; }
+
+  var withEquip = G.companions.filter(function(c){ return c.equip && c.equip.length > 0; });
+  if (!withEquip.length) { toast('装備している仲間がいません'); return; }
+
+  var modal = document.getElementById('comp-picker-modal');
+  var list  = document.getElementById('comp-picker-list');
+  document.getElementById('comp-picker-title').textContent = '強化する装備を選ぶ';
+  var sortBar = document.getElementById('party-sort-bar');
+  if (sortBar) sortBar.remove();
+
+  var rows = [];
+  withEquip.forEach(function(c) {
+    c.equip.forEach(function(e, ei) {
+      rows.push({ c: c, e: e, ei: ei });
+    });
+  });
+
+  list.innerHTML = rows.map(function(r, idx) {
+    var lvl = r.e.upgradeLevel || 0;
+    return '<div class="picker-row" data-upg-idx="' + idx + '">'
+      + '<span style="font-size:22px;margin-right:4px">' + r.e.icon + '</span>'
+      + '<div style="flex:1"><div style="font-size:14px;color:#2c2416;font-weight:600">' + r.e.name + (lvl > 0 ? '　+' + lvl : '') + '</div>'
+      + '<div style="font-size:10px;color:#6b5e4e">' + r.c.word + ' の装備</div></div>'
+      + '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-upg-idx]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var idx = parseInt(this.getAttribute('data-upg-idx'));
+      var r = rows[idx];
+      closeCompPicker();
+      confirmUpgrade(r.c, r.e, r.ei);
+    });
+  });
+  modal.style.display = 'flex';
+}
+
+function confirmUpgrade(comp, equip, ei) {
+  showConfirmModal({
+    icon: '🔧',
+    title: '強化しますか？',
+    body: equip.icon + ' ' + equip.name + '\nSchrott×10を使って強化する。\n成功率は80%。\n\n（失敗時、装備は無事だがSchrottは消費される）',
+    confirmLabel: '強化する',
+    cancelLabel: 'やめる',
+    onConfirm: function() { doEquipUpgrade(comp, equip, ei); }
+  });
+}
+
+function doEquipUpgrade(comp, equip, ei) {
+  var schrott = G.inventory.find(function(i){ return i.name === SCHROTT_NAME; });
+  if (!schrott || (schrott.qty || 1) < 10) { toast('Schrottが足りません'); return; }
+  schrott.qty -= 10;
+  if (schrott.qty <= 0) G.inventory = G.inventory.filter(function(i){ return i.name !== SCHROTT_NAME; });
+
+  var success = Math.random() < 0.8;
+  if (!success) {
+    saveGame();
+    toast('強化に失敗した……Schrottは消えてしまった。');
+    renderInventory();
+    return;
+  }
+
+  equip.upgradeLevel = (equip.upgradeLevel || 0) + 1;
+
+  // 数値ステータス（atk/def/spd/lck）は+10
+  if (equip.stat) {
+    Object.keys(equip.stat).forEach(function(k) {
+      equip.stat[k] = (equip.stat[k] || 0) + 10;
+      comp.stats[k] = (comp.stats[k] || 0) + 10;
+    });
+  }
+  // 特殊効果（%系）は+1%（val は0〜1のfloatで保持されている前提）
+  var effs = equip.effects || (equip.effect ? [{ effect: equip.effect, val: equip.effectValue }] : null);
+  if (effs) {
+    effs.forEach(function(x) { if (x) x.val = (x.val || 0) + 0.01; });
+    if (!equip.effects && equip.effect) {
+      equip.effectValue = effs[0].val;
+    }
+  }
+
+  saveGame();
+  showEventPopup({
+    icon: '✨', title: '強化に成功した',
+    body: equip.icon + ' ' + equip.name + '　+' + equip.upgradeLevel + '\n\n' + comp.word + 'の装備が、\n一段、強くなった。',
+    buttonLabel: '良かった',
+  });
+  renderInventory();
 }
 
 function renderBlueprintCraftArea(container) {
@@ -2997,6 +3181,7 @@ function useItem(item) {
   if (item.type === '装備(仲間)') { openCompPicker(item, 'equip'); return; }
   if (item.type === 'スキル魂') { openCompPicker(item, 'skill'); return; }
   if (item.type === '進化の石') { openEvoStep1(item); return; }
+  if (item.name === SCHROTT_NAME) { toast(item.name + ' — ' + item.desc + '\nSchneckeのところで装備を強化できます（Schrott×10）'); return; }
   if (item.type === '素材') { toast(item.name + ' — ' + item.desc + '\n実験台で進化の石を錬成できます（素材×10）'); return; }
   if (item.type === 'オブジェ') { toast(item.name + ' — ' + item.desc + '\n仲間の部屋に飾れます'); return; }
   if (item.type === '設計図') {
@@ -3657,18 +3842,6 @@ function checkDungeonClear(dungName) {
           icon: '🐚', title: '霧の入り江を踏破した',
           body: hero + 'は波打ち際に立ち、振り返った。\n新しい瓶が、浜辺へ流れ着くようになった。',
           buttonLabel: '家へ帰る',
-        });
-      }, 1000);
-    } else if (dungName === '珊瑚の迷宮') {
-      var surv2 = dungState.party.filter(function(c){ return c.hp > 0; });
-      var hero2 = surv2.length ? surv2[0].word : dungState.party[0].word;
-      setTimeout(function(){
-        showEventPopup({
-          icon: '🪸', title: '珊瑚の迷宮を踏破した',
-          body: '光の届かない深さから、帰ってきた。\n新しい瓶が流れ着くようになった。',
-          buttonLabel: '帰還する',
-          bgColor: hexToRgba('#508CA4', 0.85),
-          innerBg: '#e8f4fc',
           onClose: function() {
             if (!G.apartmentUnlocked) {
               setTimeout(function(){
@@ -3684,6 +3857,48 @@ function checkDungeonClear(dungName) {
                   }
                 });
               }, 400);
+            }
+          }
+        });
+      }, 1000);
+    } else if (dungName === '珊瑚の迷宮') {
+      var surv2 = dungState.party.filter(function(c){ return c.hp > 0; });
+      var hero2 = surv2.length ? surv2[0].word : dungState.party[0].word;
+      setTimeout(function(){
+        showEventPopup({
+          icon: '🪸', title: '珊瑚の迷宮を踏破した',
+          body: '光の届かない深さから、帰ってきた。\n新しい瓶が流れ着くようになった。',
+          buttonLabel: '帰還する',
+          bgColor: hexToRgba('#508CA4', 0.85),
+          innerBg: '#e8f4fc',
+          onClose: function() {
+            if (!G.schneckeUnlocked) {
+              setTimeout(function(){
+                showEventPopup({
+                  icon: '🐌', title: '???',
+                  body: '珊瑚の隙間に、何か蠢いていた。\n\n紫と青緑の入り混じった、\n見たことのない生き物だ。\n\nじっと、こちらを見ている。\n何を考えているのかは、わからない。',
+                  buttonLabel: '見てみる',
+                  bgColor: 'rgba(40,20,60,0.82)',
+                  innerBg: '#1a0e30',
+                  titleColor: '#c8a8e8',
+                  bodyColor: '#9888c0',
+                  onClose: function() {
+                    G.schneckeUnlocked = true;
+                    saveGame();
+                    setTimeout(function(){
+                      showEventPopup({
+                        icon: '🐌', title: 'Schnecke',
+                        body: '「……要らないもの、ある？」\n\n低く、平坦な声だった。\n\nどうやら、不要なものを\n何かに変えてくれるらしい。\n荷物の画面から、いつでも会える。',
+                        buttonLabel: '覚えておく',
+                        bgColor: 'rgba(40,20,60,0.82)',
+                        innerBg: '#1a0e30',
+                        titleColor: '#c8a8e8',
+                        bodyColor: '#9888c0',
+                      });
+                    }, 500);
+                  }
+                });
+              }, 700);
             }
           }
         });
@@ -3895,6 +4110,7 @@ function saveGame() {
       apartmentUnlocked: G.apartmentUnlocked || false,
       rooms: G.rooms || [],
       partners: G.partners || [],
+      schneckeUnlocked: G.schneckeUnlocked || false,
       // ダンジョン探索中状態
       activeDungeon: dungState.active ? {
         dungId: dungState.dung ? dungState.dung.id : null,
@@ -3939,6 +4155,7 @@ function loadGame() {
     G.apartmentUnlocked = data.apartmentUnlocked || false;
     G.rooms = data.rooms || [];
     G.partners = data.partners || [];
+    G.schneckeUnlocked = data.schneckeUnlocked || false;
     // G.companions内のequipは参照のみ（IDなし）なのでそのまま使える
     // G.partyはリロード時はクリア（再編成してもらう）
     G.party = [];
