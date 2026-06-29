@@ -1527,9 +1527,9 @@ function triggerBattle(isBoss) {
     var s = forestState.schritt;
     var gardenEnemies = (ENEMIES['庭'] && ENEMIES['庭'].length) ? ENEMIES['庭'] : ['夜の蛾', '茂みの影', '木霊'];
     if (!isBoss) enemy = rand(gardenEnemies);
-    enemyAtk = Math.floor(10 + s * 2.6) + Math.floor(Math.random() * 8);
-    enemyDef = Math.floor(6 + s * 1.6) + Math.floor(Math.random() * 5);
-    enemyHP  = Math.floor(70 + s * 26) + Math.floor(Math.random() * Math.max(20, s * 9));
+    enemyAtk = Math.floor(45 + s * 3.2) + Math.floor(Math.random() * 14);
+    enemyDef = Math.floor(28 + s * 2.0) + Math.floor(Math.random() * 9);
+    enemyHP  = Math.floor(480 + s * 30) + Math.floor(Math.random() * Math.max(40, s * 11));
     // ボス（白鳥救出戦）はさらに大幅強化
     if (isBoss) {
       enemyAtk = Math.floor(enemyAtk * 1.8);
